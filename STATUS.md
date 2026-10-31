@@ -1,9 +1,9 @@
 # STATUS — みんなの モントモ
 
 状態: 🟢 順調
-今やっていること: v0.6（セーブ3つ・よこむき・ホーム画面アイコン・名前「みんなの モントモ」）を GitHub Pages に載せる
-次の一手: 公開リポジトリ minna-no-montomo を作って push し Pages を有効にする（本人の許可待ち）。iPad で横向き・セーブを試してもらう
-ブロッカー: 公開リポジトリの作成が安全確認で止まった。本人の OK 待ち（通しプレイ 740×390・1024×768 とも ok、エラー0）
+今やっていること: v0.7（わざの ぞくせい・いりょく・めいちゅう・こうか、ダブルタップで がめんが ずれる ふぐあいの しゅうせい）を Pages に こうかい
+次の一手: iPad で ダブルタップしても ずれないか、わざの ひょうじが よみやすいか 本人に たしかめて もらう
+ブロッカー: なし（通しプレイ 740×390・1024×768 とも ok、エラー0。公開先 https://akihikoito-apps.github.io/minna-no-montomo/ ）
 最終更新: 2026-10-31（Claude）
 
 <!-- 上の5行は本部（_hq）が読む。行の頭の言葉は変えないこと。詳しいメモはこの下に自由に書いてよい。 -->
@@ -17,3 +17,4 @@
 - 2026-10-31 Claude: 試作 v0.4。Forge（かじや：レンの案内で ぶき→ぼうぐ の順に強化、G.lv と recalcBonus）、受付「つぎの クエスト」→ QUESTS に hunt（show で出し分け、クリアずみは灰色）、Hunt（そうげん：イエロール5＋ボス トルピー）。本人の原画2枚を 参考資料/ に保存し drawToruppy / drawYellowl を作成。Battle を begin(foe, from) にして、チュートリアル（Field）と ふつうのクエスト（Hunt）で動きを分けた（網はだれにでも・成功率・失敗・逃げる・レンの回復）。不具合：Forge に up() という名前を付けたら pointerup のたびに呼ばれていた → upgrade() に改名し CLAUDE.md に注意を書いた。playtest を強化→受付→イエロール（逃げる→倒す）→トルピー（網失敗→成功）→クリアまで延長。両サイズ ok・エラー0。CHAPTERS 8つ、NEW は forge。
 - 2026-10-31 Claude: 試作 v0.5。G に coins / nets{s,m,l} / box（もっている）/ team（つれていく uid、3まで）を追加し、G.net・G.party は廃止。Battle を作り直し（ALLIES で仲間ごとの HP・わざ、こうたい・倒れたら交代・網の大きさ選択、合わない大きさは減らさない）。うらいちばを4けんの横スクロール通りに（drawMarketStreet、ドラッグと ◀▶）、どうぐや（小100・中300・大800コイン）とモンスター きょうしつ（チーム編成）を作成。トルピーのクエスト報酬 500コインは受付で渡す。CHAPTERS に town2（NEW）。playtest に 報酬・買い物・コイン不足・編成の入れ替え・戦闘の交代 を追加。両サイズ ok・エラー0。まだ git にコミットしていない。
 - 2026-10-31 Claude: v0.6。名前を「みんなの モントモ」に決定（本人）。セーブ3つ（localStorage、monboken-save-1〜3。つづきは movie／field／movie2／market のどこかから。クエストや かじやの とちゅうなら うらいちばから。うらいちばでは 3びょうごとに こっそり セーブ）。タイトルは「はじめから／つづきから」＋テストようの「あたらしい ところから／ばめんを えらぶ」（こちらは セーブしない）。たてむきの ときは「よこむきに してね」画面で とめる（iOS は むきを こてい できないため）。manifest.json と アイコン（icons/）で ホーム画面に おける。テストの 画面サイズを 740×390（スマホよこ）と 1024×768（iPad）に かえた。参考資料/*.jpg は .gitignore。初回コミット 10b9fc7。
+- 2026-10-31 Claude: v0.7。TYPES / STRONG / typeEff / MON_TYPE を追加、わざを {type,pow,acc,heal,fx} に統一（FOES も）。moveButton で わざボタンに ぞくせい・いりょく・めいちゅう・こうか・◎／△。fx は guard（つぎの ダメージ半分、こうたいで消える）と atkdown（てきの ダメージ -2、最大 -4）。iPad の ダブルタップで ページが うえに ずれて 下が まっくろ → body・canvas を position: fixed、document の touchstart/touchmove/touchend を preventDefault（名前入力の箱は のぞく）、gesture と dblclick も止め、scroll したら scrollTo(0,0)。?v=0.7。
