@@ -13,11 +13,27 @@
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=0.7">
+<link rel="stylesheet" href="css/style.css?v=0.8">
 </head>
 <body>
 <canvas id="cv"></canvas>
-<div id="namebox" hidden>
+<!-- あたらしい バージョンの おしらせ -->
+<div id="update-banner" class="ui-html" hidden>
+  <span class="up-text">✨ あたらしい バージョンが あります</span>
+  <button id="btn-update" class="up-btn">こうしんする</button>
+  <button id="btn-update-later" class="up-later">あとで</button>
+</div>
+<!-- こうしん りれき -->
+<div id="logbox" class="ui-html" hidden>
+  <div class="log-card">
+    <div class="log-head">
+      <h2>こうしん りれき 📜</h2>
+      <button id="log-close">とじる</button>
+    </div>
+    <div id="log-list"></div>
+  </div>
+</div>
+<div id="namebox" class="ui-html" hidden>
   <div class="card">
     <p>きみの なまえを いれてね</p>
     <input id="nameinput" maxlength="6" value="ソラ" autocomplete="off">
@@ -25,6 +41,7 @@
   </div>
 </div>
 <!-- ?v= は こうしんした ときに ふるい ファイルが のこらないように する ための ばんごう -->
-<script src="js/game.js?v=0.7"></script>
+<script src="js/changelog.js?v=0.8"></script>
+<script src="js/game.js?v=0.8"></script>
 </body>
 </html>

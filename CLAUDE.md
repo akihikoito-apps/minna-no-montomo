@@ -16,12 +16,19 @@
 - `index.html` `css/` `js/game.js` … ゲーム本体（ビルドなし。index.html を開けば遊べる）
 - **新しい場面を作ったら、js/game.js の `CHAPTERS` に足して `isNew: true` をその場面へ付け替える。** タイトルの「あたらしい ところから」と「ばめんを えらぶ」がそこから始まる（本人の希望：毎回最初からやらなくていいように）。`startAt()` にもその場面の始め方を足す
 - `tools/playtest.mjs` … Chrome を自動で動かして、ムービー〜クリアまで通しプレイし、画面写真を撮る
-  - `node tools/playtest.mjs <プロジェクトの絶対パス> <出力フォルダ> 900 600`（縦画面は `390 760`）
+  - `node tools/playtest.mjs <プロジェクトの絶対パス> <出力フォルダ> 740 390`（スマホよこ）と `1024 768`（iPad）の両方で通す
   - 途中から試すときは index.html#movie / #field / #boss / #clear / #movie2 / #market / #gather / #forge / #hunt / #town2
 - **シーンの物に `up` `down` `move` という名前のメソッドを付けない。** 指をはなす・おす・動かすたびに自動で呼ばれる（かじやの強化ボタンでこの事故が起きた）
 - 本人が描いたモンスターは 参考資料/ に原画を置き、js/game.js の draw〇〇 のコメントに原画の場所を書く
 - `.claude/agents/` … このプロジェクト用のエージェント定義
   - spec-keeper（要項係）／game-builder（実装係）／art-director（え係）／playtester（テスト係）
+
+## 更新して公開するとき（毎回この順番）
+1. `js/changelog.js` の いちばん上に、その版の「こうしん りれき」を子ども向けの言葉で足す
+2. `node tools/bump.mjs 0.9` で版の番号を上げる（js/game.js の GAME_VERSION・sw.js・version.json・index.html の ?v= をまとめて変える）
+3. playtest を 740×390 と 1024×768 で通す
+4. コミットして push。数分で iPad に「あたらしい バージョンが あります」の帯が出る（sw.js が変わったとき と version.json の番号が違うとき に出る）
+- 番号を上げ忘れると、帯が出ず、iPad に古い版が残る
 
 ## 本部（_hq）との約束
 - 作業の区切りで必ず STATUS.md（リポジトリ直下）を更新すること。「状態・今やっていること・次の一手・ブロッカー・最終更新」の各行を書き換える。

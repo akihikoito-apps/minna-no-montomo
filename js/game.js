@@ -17,7 +17,7 @@ resize();
 
 // iPad の Safari 対策：ダブルタップの ズーム・ページの スクロール・ピンチを とめる
 // （とめないと、がめんの したを 2かい タップした ときに ページが うえに ずれて したが まっくろに なる）
-const isFormEl = el => el && el.closest && el.closest('#namebox');
+const isFormEl = el => el && el.closest && el.closest('.ui-html'); // なまえの はこ・おしらせ・こうしん りれき は ふつうに さわれる
 for (const ev of ['touchstart', 'touchmove', 'touchend']) {
   document.addEventListener(ev, e => { if (!isFormEl(e.target) && e.cancelable) e.preventDefault(); }, { passive: false });
 }
@@ -35,6 +35,9 @@ const lerp = (a, b, p) => a + (b - a) * p;
 const ease = p => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const hash = (i, j) => (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000;
+
+// ゲームの ばんごう（あげる ときは node tools/bump.mjs 0.9 で sw.js・version.json・index.html も いっしょに）
+const GAME_VERSION = '0.8';
 
 const G = {
   name: 'ソラ', firstBattle: true, gear: false, bonus: { hp: 0, atk: 0, def: 0 }, quest: null,
@@ -666,6 +669,11 @@ const Title = {
     button(W / 2 - bw / 2, by, half, sh, 'あたらしい ところから', () => this.jump(NEWEST.id), { col: '#e8f0fa', line: '#4a5a72', sub: NEWEST.name, px: clamp(sh * 0.28, 11, 16) });
     button(W / 2 - bw / 2 + half + 10, by, half, sh, 'ばめんを えらぶ', () => { this.menu = true; }, { col: '#e8f0fa', line: '#4a5a72', px: clamp(sh * 0.28, 11, 16) });
     text('↑ テストよう（セーブ されません）', W / 2, by + sh + 12, 12, '#3a6ea5', 'center', '#fff');
+    // こうしん りれき と バージョン
+    const lw = Math.min(190, W * 0.3);
+    button(10, H - 50, lw, 40, 'こうしん りれき 📜', () => openLog(), { col: '#fff3c4', px: 15 }); // うえは おしらせの おびが でるので した
+    if (!logSeen()) { rr(lw - 36, H - 58, 46, 20, 8); ctx.fillStyle = '#e63946'; ctx.fill(); text('NEW', lw - 13, H - 48, 12, '#fff'); }
+    text(`ver ${GAME_VERSION}`, W - 12, H - 14, 14, '#fff', 'right', 'rgba(0,0,0,.45)');
     if (this.menu) this.drawMenu();
     if (this.slots) this.drawSlots();
   },
@@ -2337,7 +2345,7 @@ const pointerUp = e => { if (scene && scene.up) scene.up(e.pointerId); };
 cv.addEventListener('pointerup', pointerUp);
 cv.addEventListener('pointercancel', pointerUp);
 window.addEventListener('keydown', e => {
-  if (nameOpen) return;
+  if (nameOpen || logOpen) return;
   keys[e.key] = true;
   if ((e.key === 'Enter' || e.key === ' ') && !Fade.dir) { e.preventDefault(); Talk.tap(); }
 });
@@ -2423,6 +2431,63 @@ const Save = {
 };
 window.addEventListener('pagehide', () => { if (scene === Market) Save.write('market', true); });
 
+// ===== こうしん りれき =====
+let logOpen = false;
+const LOG_KEY = 'montomo-log-seen';
+function logSeen() { try { return localStorage.getItem(LOG_KEY) === GAME_VERSION; } catch (e) { return true; } }
+function openLog() {
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  document.getElementById('log-list').innerHTML = CHANGELOG.map((c, i) =>
+    `<div class="ent${i === 0 ? ' latest' : ''}"><span class="ver">ver ${esc(c.ver)}</span><span class="date">${esc(c.date)}</span>` +
+    `<h3>${esc(c.title)}</h3><ul>${c.items.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`).join('');
+  document.getElementById('log-list').scrollTop = 0;
+  document.getElementById('logbox').hidden = false; logOpen = true;
+  try { localStorage.setItem(LOG_KEY, GAME_VERSION); } catch (e) { }
+}
+document.getElementById('log-close').addEventListener('click', () => { document.getElementById('logbox').hidden = true; logOpen = false; });
+
+// ===== あたらしい バージョンの おしらせ =====
+// 2つの ほうほうで しらべる：sw.js が かわった とき（サービスワーカー）と、version.json の ばんごうが ちがう とき。
+// iPad で アプリに もどって きた ときと、5ふん ごとにも しらべる。
+let swWaiting = null, reloading = false;
+function showUpdateBanner() {
+  const b = document.getElementById('update-banner');
+  if (b && b.dataset.dismissed !== '1') b.hidden = false;
+}
+function onLatestVersion(v) { if (v && v !== GAME_VERSION) showUpdateBanner(); }
+function checkVersion() {
+  if (location.protocol === 'file:') return;
+  fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : null).then(j => { if (j) onLatestVersion(String(j.version)); }).catch(() => { });
+}
+function setupUpdates() {
+  if (location.protocol !== 'file:' && navigator.serviceWorker) {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      const watch = w => w.addEventListener('statechange', () => {
+        if (w.state === 'installed' && navigator.serviceWorker.controller) { swWaiting = w; showUpdateBanner(); }
+      });
+      if (reg.waiting && navigator.serviceWorker.controller) { swWaiting = reg.waiting; showUpdateBanner(); }
+      reg.addEventListener('updatefound', () => { if (reg.installing) watch(reg.installing); });
+      const poke = () => reg.update().catch(() => { });
+      setInterval(poke, 5 * 60 * 1000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) poke(); });
+    }).catch(() => { });
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (reloading) return; reloading = true; location.reload(); });
+  }
+  checkVersion();
+  setInterval(checkVersion, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+  document.getElementById('btn-update').addEventListener('click', () => {
+    if (scene === Market) Save.write('market', true); // こうしん する まえに セーブ
+    document.getElementById('btn-update').textContent = 'こうしん ちゅう…';
+    if (swWaiting) { swWaiting.postMessage({ type: 'SKIP_WAITING' }); setTimeout(() => location.reload(), 3000); }
+    else location.reload();
+  });
+  document.getElementById('btn-update-later').addEventListener('click', () => {
+    const b = document.getElementById('update-banner'); b.hidden = true; b.dataset.dismissed = '1';
+  });
+}
+
 // ===== よこむき に する =====
 // iPad・スマホの ブラウザは むきを こてい できない ことが あるので、たてむきの ときは「よこに してね」と だして とめる
 function portrait() { return H > W; }
@@ -2444,6 +2509,7 @@ function tryLockLandscape() {
 
 // アドレスの さいごに #gather などを つけても その ばめんから はじまる
 (function start() {
+  setupUpdates();
   const h = location.hash.slice(1), m = h.match(/^load(\d)$/);
   if (m) { if (!Save.load(+m[1])) go(Title); }
   else if (!startAt(h)) go(Title);
