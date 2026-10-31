@@ -12,7 +12,20 @@ function resize() {
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
 }
 window.addEventListener('resize', resize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
 resize();
+
+// iPad の Safari 対策：ダブルタップの ズーム・ページの スクロール・ピンチを とめる
+// （とめないと、がめんの したを 2かい タップした ときに ページが うえに ずれて したが まっくろに なる）
+const isFormEl = el => el && el.closest && el.closest('#namebox');
+for (const ev of ['touchstart', 'touchmove', 'touchend']) {
+  document.addEventListener(ev, e => { if (!isFormEl(e.target) && e.cancelable) e.preventDefault(); }, { passive: false });
+}
+for (const ev of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+// それでも ずれて しまったら すぐ もどす
+const unscroll = () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); };
+window.addEventListener('scroll', unscroll);
+if (window.visualViewport) window.visualViewport.addEventListener('scroll', unscroll);
 
 const FONT = '"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Meiryo",sans-serif';
 const font = (px, w = 800) => `${w} ${Math.round(px)}px ${FONT}`;
@@ -1223,43 +1236,80 @@ const Field = {
 };
 
 // ===== たたかい（コマンドを えらぶ ターンせい） =====
+// ぞくせい：くさ → いわ → かぜ → くさ の じゃんけん。ひかり と ふつう は どれにも ふつう
+const TYPES = {
+  normal: { name: 'ふつう', col: '#9a9aa6' },
+  kusa: { name: 'くさ', col: '#3fa34d' },
+  iwa: { name: 'いわ', col: '#9c6b3c' },
+  kaze: { name: 'かぜ', col: '#3a9fd6' },
+  hikari: { name: 'ひかり', col: '#e0a800' },
+};
+const STRONG = { kusa: 'iwa', iwa: 'kaze', kaze: 'kusa' }; // ひだりが みぎに つよい
+function typeEff(atk, def) {
+  if (STRONG[atk] === def) return 1.5;
+  if (STRONG[def] === atk) return 0.67;
+  return 1;
+}
+const MON_TYPE = { pomuru: 'kusa', igabon: 'kusa', dongora: 'iwa', toruppy: 'kaze', yellowl: 'hikari' };
+// わざ：type ぞくせい、pow いりょく、acc めいちゅう（1＝かならず）、heal かいふく、fx その ほかの こうか
+//   fx：guard＝つぎに うける ダメージが はんぶん、atkdown＝あいての こうげきを 2 さげる
+const FX_TEXT = { guard: 'つぎの ダメージ はんぶん', atkdown: 'あいての こうげき ダウン' };
 const FOES = {
-  igabon: { name: 'イガボン', hp: 18, lv: 2, moves: [{ n: 'トゲトゲころがり', min: 3, max: 5 }, { n: 'イガイガタックル', min: 2, max: 4 }] },
-  dongora: { name: 'ドンゴラ', hp: 48, lv: 4, moves: [{ n: 'いわおとし', min: 5, max: 7 }, { n: 'しっぽバシン', min: 4, max: 6 }] },
+  igabon: { name: 'イガボン', hp: 18, lv: 2, moves: [{ n: 'トゲトゲころがり', type: 'kusa', pow: 4, acc: 1 }, { n: 'イガイガタックル', type: 'normal', pow: 3, acc: 1 }] },
+  dongora: { name: 'ドンゴラ', hp: 48, lv: 4, moves: [{ n: 'いわおとし', type: 'iwa', pow: 7, acc: 0.9 }, { n: 'しっぽバシン', type: 'normal', pow: 5, acc: 1 }] },
   // ここから 本人が かいた モンスター（参考資料/ に 原画）
-  yellowl: { name: 'イエロール', hp: 24, lv: 3, catchBase: 0.35, moves: [{ n: 'ぐるぐるローリング', min: 4, max: 6 }, { n: 'こしに てを あてて タックル', min: 3, max: 5 }] },
-  toruppy: { name: 'トルピー', hp: 60, lv: 6, catchBase: 0.15, moves: [{ n: 'ギザギザつばさ', min: 6, max: 8 }, { n: 'やじるしストライク', min: 7, max: 9 }, { n: 'キバキバかみつき', min: 5, max: 7 }] },
+  yellowl: { name: 'イエロール', hp: 24, lv: 3, catchBase: 0.35, moves: [{ n: 'ぐるぐるローリング', type: 'hikari', pow: 5, acc: 1 }, { n: 'こしに てを あてて タックル', type: 'normal', pow: 4, acc: 1 }] },
+  toruppy: { name: 'トルピー', hp: 60, lv: 6, catchBase: 0.15, moves: [{ n: 'ギザギザつばさ', type: 'kaze', pow: 7, acc: 1 }, { n: 'やじるしストライク', type: 'normal', pow: 8, acc: 0.85 }, { n: 'キバキバかみつき', type: 'normal', pow: 6, acc: 1 }] },
 };
 // なかまに なった ときの つよさと わざ
 const ALLIES = {
   pomuru: {
     hp: 40, lv: 5, moves: [
-      { n: 'ころころアタック', min: 7, max: 9, acc: 1, info: 'かならず あたる' },
-      { n: 'はっぱシュート', min: 10, max: 13, acc: 0.8, info: 'つよいけど はずれることも' },
-      { n: 'げんきチャージ', heal: 15, info: 'げんきを とりもどす' },
+      { n: 'ころころアタック', type: 'normal', pow: 8, acc: 1 },
+      { n: 'はっぱシュート', type: 'kusa', pow: 11, acc: 0.8 },
+      { n: 'げんきチャージ', type: 'kusa', heal: 15 },
     ]
   },
   dongora: {
     hp: 48, lv: 4, moves: [
-      { n: 'しっぽバシン', min: 6, max: 8, acc: 1, info: 'かならず あたる' },
-      { n: 'いわおとし', min: 9, max: 12, acc: 0.85, info: 'つよいけど はずれることも' },
+      { n: 'しっぽバシン', type: 'normal', pow: 7, acc: 1 },
+      { n: 'いわおとし', type: 'iwa', pow: 11, acc: 0.85 },
+      { n: 'かたい いわの かまえ', type: 'iwa', fx: 'guard' },
     ]
   },
   toruppy: {
     hp: 55, lv: 6, moves: [
-      { n: 'ギザギザつばさ', min: 8, max: 10, acc: 1, info: 'かならず あたる' },
-      { n: 'やじるしストライク', min: 11, max: 14, acc: 0.8, info: 'つよいけど はずれることも' },
-      { n: 'キバキバかみつき', min: 9, max: 11, acc: 0.9, info: 'だいたい あたる' },
+      { n: 'ギザギザつばさ', type: 'kaze', pow: 9, acc: 1 },
+      { n: 'やじるしストライク', type: 'normal', pow: 13, acc: 0.8 },
+      { n: 'キバキバかみつき', type: 'normal', pow: 7, acc: 0.95, fx: 'atkdown' },
     ]
   },
   yellowl: {
     hp: 32, lv: 3, moves: [
-      { n: 'ぐるぐるローリング', min: 6, max: 8, acc: 1, info: 'かならず あたる' },
-      { n: 'にっこりパワー', heal: 12, info: 'げんきを とりもどす' },
+      { n: 'ぐるぐるローリング', type: 'hikari', pow: 7, acc: 1 },
+      { n: 'にっこりパワー', type: 'hikari', heal: 12 },
+      { n: 'ピカッと にらめっこ', type: 'hikari', fx: 'atkdown', acc: 1 },
     ]
   },
-  igabon: { hp: 25, lv: 2, moves: [{ n: 'トゲトゲころがり', min: 5, max: 7, acc: 1, info: 'かならず あたる' }] },
+  igabon: { hp: 25, lv: 2, moves: [{ n: 'トゲトゲころがり', type: 'kusa', pow: 6, acc: 1 }] },
 };
+// わざの せつめい（いりょく・めいちゅう・こうか）
+function moveInfo(m) {
+  const out = [];
+  if (m.pow) out.push(`いりょく ${m.pow}`);
+  if (m.pow || m.fx === 'atkdown') out.push(`めいちゅう ${Math.round((m.acc || 1) * 100)}%`);
+  if (m.heal) out.push(`HPを ${m.heal} かいふく`);
+  if (m.fx) out.push(FX_TEXT[m.fx]);
+  return out.join('・');
+}
+// ぞくせいの しるし（いろつきの ちいさな ふだ）
+function typeChip(type, x, y, px) {
+  const t = TYPES[type]; ctx.font = font(px);
+  const w = ctx.measureText(t.name).width + px * 0.9;
+  rr(x, y - px * 0.75, w, px * 1.5, px * 0.4); ctx.fillStyle = t.col; ctx.fill();
+  text(t.name, x + w / 2, y + 1, px, '#fff');
+  return w;
+}
 const ALLY_FLIP = { dongora: true };            // ひだりむきに かいて ある モンスター
 const ALLY_SCALE = { pomuru: 1.05, dongora: 0.85, toruppy: 0.62, yellowl: 0.85, igabon: 0.9 };
 // とりあみ：大きさ せんよう（［小］は 小さい モンスター だけ）
@@ -1279,7 +1329,7 @@ function addMonster(kind) {
 function teamMons() { return G.team.map(u => G.box.find(m => m.uid === u)).filter(Boolean); }
 function makeAlly(m) {
   const d = ALLIES[m.kind], mx = d.hp + G.bonus.hp;
-  return { uid: m.uid, kind: m.kind, name: MONSTER_NAME[m.kind], hp: mx, max: mx, dhp: mx, lv: d.lv, moves: d.moves };
+  return { uid: m.uid, kind: m.kind, type: MON_TYPE[m.kind], name: MONSTER_NAME[m.kind], hp: mx, max: mx, dhp: mx, lv: d.lv, moves: d.moves };
 }
 
 const Battle = {
@@ -1287,9 +1337,9 @@ const Battle = {
   begin(foe, from = Field) {
     const d = FOES[foe.kind];
     this.foe = foe; this.from = from; this.tut = from === Field;
-    this.e = { kind: foe.kind, name: d.name, hp: d.hp, max: d.hp, dhp: d.hp, lv: d.lv, boss: !!foe.boss, moves: d.moves, catchBase: d.catchBase || 0.2, size: d.size || 's' };
+    this.e = { kind: foe.kind, type: MON_TYPE[foe.kind], name: d.name, hp: d.hp, max: d.hp, dhp: d.hp, lv: d.lv, boss: !!foe.boss, moves: d.moves, catchBase: d.catchBase || 0.2, size: d.size || 's', atkDown: 0 };
     this.allies = teamMons().map(makeAlly); this.a = this.allies[0];
-    this.phase = 'talk'; this.fx = { aL: 0, eL: 0, aH: 0, eH: 0, eF: 0 }; this.pops = []; this.t = 0;
+    this.phase = 'talk'; this.fx = { aL: 0, eL: 0, aH: 0, eH: 0, eF: 0 }; this.pops = []; this.t = 0; this.guard = false;
     this.halfTip = false; this.netHint = false; this.cap = null; this.forced = false;
     go(this);
     const lines = [{ t: this.e.boss ? `ボスの ${d.name}が あらわれた！` : `${d.name}が あらわれた！` }, { who: '{N}', t: `いけっ、${this.a.name}！` }];
@@ -1303,6 +1353,7 @@ const Battle = {
         { who: 'そんちょうの こえ', t: 'モンスターは、よわい モンスターほど つかまえやすい。' },
         { who: 'そんちょうの こえ', t: 'つよい モンスターでも、よわらせれば どんな モンスターでも つかまえやすく なるんじゃ。' },
         { who: 'そんちょうの こえ', t: 'わざで よわらせてから、モンスターとりあみ［小］で つかまえよう！' },
+        { who: 'そんちょうの こえ', t: 'ドンゴラは「いわ」の モンスター。「くさ」の わざが よく きくぞ！ わざの ボタンの ◎を みるんじゃ。' },
       );
     } else if (this.e.boss) lines.push({ who: 'レン', t: 'ボスだ！ たおしても いいし、よわらせて あみで つかまえても いいよ！' });
     Talk.say(lines, () => this.cmd());
@@ -1313,10 +1364,16 @@ const Battle = {
     this.phase = 'talk';
     const a = this.a, e = this.e, lines = [{ t: `${a.name}の ${m.n}！`, fx: () => { this.fx.aL = 0.4; } }];
     if (m.heal) lines.push({ t: `${a.name}の げんきが ${m.heal} もどった！`, fx: () => { a.hp = Math.min(a.max, a.hp + m.heal); this.pop('a', '+' + m.heal, '#2fbf4a'); } });
-    else if (Math.random() > m.acc) lines.push({ t: 'こうげきは はずれた！', fx: () => this.pop('e', 'ミス', '#888') });
+    else if (m.fx === 'guard') lines.push({ t: `${a.name}は みを まもる かまえ！ つぎに うける ダメージが はんぶんに なる。`, fx: () => { this.guard = true; this.pop('a', 'ガード', '#3a9fd6'); } });
+    else if (Math.random() > (m.acc || 1)) lines.push({ t: 'こうげきは はずれた！', fx: () => this.pop('e', 'ミス', '#888') });
     else {
-      const d = rnd(m.min, m.max) + G.bonus.atk;
-      lines.push({ t: `${e.name}に ${d}の ダメージ！`, fx: () => { e.hp = Math.max(e.boss && this.tut ? 1 : 0, e.hp - d); this.fx.eH = 0.45; this.pop('e', '-' + d, '#e63946'); } });
+      if (m.pow) {
+        const ef = typeEff(m.type, e.type), d = Math.max(1, Math.round(m.pow * ef) + rnd(-1, 1) + G.bonus.atk);
+        lines.push({ t: `${e.name}に ${d}の ダメージ！`, fx: () => { e.hp = Math.max(e.boss && this.tut ? 1 : 0, e.hp - d); this.fx.eH = 0.45; this.pop('e', '-' + d, '#e63946'); } });
+        if (ef > 1) lines.push({ t: 'よく きいた！' });
+        else if (ef < 1) lines.push({ t: 'あまり きいて いない みたい…' });
+      }
+      if (m.fx === 'atkdown') lines.push({ t: `${e.name}の こうげきが さがった！`, fx: () => { e.atkDown = Math.min(4, e.atkDown + 2); this.pop('e', 'こうげき↓', '#3a9fd6'); } });
     }
     Talk.say(lines, () => this.afterAlly());
   },
@@ -1344,11 +1401,17 @@ const Battle = {
     this.enemyTurn();
   },
   enemyTurn() {
-    const a = this.a, e = this.e, m = e.moves[rnd(0, e.moves.length - 1)], d = Math.max(1, rnd(m.min, m.max) - G.bonus.def);
-    Talk.say([
-      { t: `${e.name}の ${m.n}！`, fx: () => { this.fx.eL = 0.4; } },
-      { t: `${a.name}に ${d}の ダメージ！`, fx: () => { a.hp = Math.max(0, a.hp - d); this.fx.aH = 0.45; this.pop('a', '-' + d, '#e63946'); } },
-    ], () => this.afterEnemy());
+    const a = this.a, e = this.e, m = e.moves[rnd(0, e.moves.length - 1)], ef = typeEff(m.type, a.type);
+    const lines = [{ t: `${e.name}の ${m.n}！`, fx: () => { this.fx.eL = 0.4; } }];
+    if (Math.random() > (m.acc || 1)) lines.push({ t: 'こうげきは はずれた！', fx: () => this.pop('a', 'ミス', '#888') });
+    else {
+      let d = Math.max(1, Math.round(m.pow * ef) + rnd(-1, 1) - G.bonus.def - e.atkDown);
+      if (this.guard) { d = Math.max(1, Math.round(d / 2)); this.guard = false; lines.push({ t: 'かまえで ダメージが へった！' }); }
+      lines.push({ t: `${a.name}に ${d}の ダメージ！`, fx: () => { a.hp = Math.max(0, a.hp - d); this.fx.aH = 0.45; this.pop('a', '-' + d, '#e63946'); } });
+      if (ef > 1) lines.push({ t: 'よく きいた！' });
+      else if (ef < 1) lines.push({ t: 'あまり きいて いない みたい…' });
+    }
+    Talk.say(lines, () => this.afterEnemy());
   },
   // なかまが たおれたら：ほかに げんきな なかまが いれば こうたい、いなければ たすけて もらう（まけて おわりには しない）
   afterEnemy() {
@@ -1378,7 +1441,7 @@ const Battle = {
     this.phase = 'talk'; this.forced = false;
     Talk.say([
       { who: '{N}', t: old.hp > 0 ? `もどれ、${old.name}！` : `ありがとう、${old.name}。` },
-      { who: '{N}', t: `いけっ、${n.name}！`, fx: () => { this.a = n; this.fx.aL = 0.4; } },
+      { who: '{N}', t: `いけっ、${n.name}！`, fx: () => { this.a = n; this.fx.aL = 0.4; this.guard = false; } },
     ], () => forced ? this.cmd() : this.enemyTurn()); // じぶんで こうたい すると あいての ばん
   },
   useNet(sz) {
@@ -1431,6 +1494,7 @@ const Battle = {
     const h = showNum ? 66 : 54;
     rr(x, y, w, h, 12); ctx.fillStyle = 'rgba(255,252,242,.95)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#6b4a2b'; ctx.stroke();
     text(u.name, x + 12, y + 17, 17, '#3a2410', 'left');
+    ctx.font = font(17); typeChip(u.type, x + 18 + ctx.measureText(u.name).width, y + 17, 12);
     text(`Lv${u.lv}`, x + w - 12, y + 17, 15, '#3a2410', 'right');
     const bx = x + 40, bw = w - 52, by = y + 32;
     text('HP', x + 12, by + 6, 13, '#e07a1f', 'left');
@@ -1439,10 +1503,36 @@ const Battle = {
     rr(bx, by, Math.max(0.01, bw * p), 12, 6); ctx.fillStyle = p > 0.5 ? '#3ccf5a' : p > 0.2 ? '#f5c02c' : '#e63946'; ctx.fill();
     if (showNum) text(`${Math.ceil(u.dhp)} / ${u.max}`, x + w - 12, y + 54, 14, '#3a2410', 'right');
   },
-  // したの ばしょに ボタンを 2れつで ならべる
+  // したの ばしょに ボタンを 2れつで ならべる（it.move が ある ときは わざの ボタンに する）
   grid(items, bx, by, bw, bh, m) {
     const rows = Math.ceil(items.length / 2), half = (bw - m) / 2, rowH = (bh - m * (rows - 1)) / rows;
-    items.forEach((it, i) => button(bx + (i % 2) * (half + m), by + Math.floor(i / 2) * (rowH + m), half, rowH, it.label, it.cb, { px: clamp(rowH * 0.32, 13, 22), ...it.o }));
+    items.forEach((it, i) => {
+      const x = bx + (i % 2) * (half + m), y = by + Math.floor(i / 2) * (rowH + m);
+      if (it.move) this.moveButton(x, y, half, rowH, it.move);
+      else button(x, y, half, rowH, it.label, it.cb, { px: clamp(rowH * 0.32, 13, 22), ...it.o });
+    });
+  },
+  // わざの ボタン：ぞくせい・なまえ・いりょく・めいちゅう・こうか、あいてに よく きくかの しるし
+  moveButton(x, y, w, h, mv) {
+    button(x, y, w, h, '', () => this.useMove(mv), { col: '#ffe08a' });
+    hits[hits.length - 1].label = mv.n;
+    const px = clamp(h * 0.3, 12, 22), cy = y + h * 0.36;
+    const cw = typeChip(mv.type, x + 10, cy, px * 0.68);
+    let right = x + w - 8;
+    if (mv.pow) {
+      const ef = typeEff(mv.type, this.e.type);
+      if (ef !== 1) {
+        const label = ef > 1 ? '◎よくきく' : '△いまいち', bp = px * 0.6;
+        ctx.font = font(bp); const bw = ctx.measureText(label).width + bp;
+        rr(right - bw, cy - bp * 0.8, bw, bp * 1.6, bp * 0.5); ctx.fillStyle = ef > 1 ? '#e63946' : '#6b7a99'; ctx.fill();
+        text(label, right - bw / 2, cy + 1, bp, '#fff');
+        right -= bw + 6;
+      }
+    }
+    const nx = x + 16 + cw, nw = right - nx;
+    text(mv.n, nx, cy + 1, fitPx(mv.n, px, nw), '#4a2500', 'left');
+    const info = moveInfo(mv);
+    text(info, x + 10, y + h * 0.74, fitPx(info, px * 0.72, w - 20), '#6a3a10', 'left');
   },
   draw() {
     const g = this.geo(), t = this.t, e = this.e, a = this.a;
@@ -1508,7 +1598,7 @@ const Battle = {
       button(rx, by + rowH + m, half, rowH, 'こうたい', () => this.openSwap(false), { col: '#9fd4ff', line: '#2f5d8a', off: this.allies.length < 2 });
       button(rx, by + (rowH + m) * 2, half, rowH, 'にげる', () => this.run(), { col: '#c9d6e8', line: '#4a5a72' });
     } else if (this.phase === 'moves') {
-      this.grid([...a.moves.map(mv => ({ label: mv.n, cb: () => this.useMove(mv), o: { col: '#ffe08a', sub: mv.info } })), back], bx, by, bw, bh, m);
+      this.grid([...a.moves.map(mv => ({ move: mv })), back], bx, by, bw, bh, m);
     } else if (this.phase === 'nets') {
       this.grid([...['s', 'm', 'l'].map(k => ({
         label: `とりあみ${NETS[k].short} ×${G.nets[k]}`, cb: () => this.useNet(k),
@@ -1516,7 +1606,7 @@ const Battle = {
       })), back], bx, by, bw, bh, m);
     } else if (this.phase === 'swap') {
       const others = this.allies.filter(x => x !== a);
-      const items = others.map(x => ({ label: x.name, cb: () => x.hp > 0 ? this.doSwap(x) : null, o: { col: '#9fd4ff', line: '#2f5d8a', off: x.hp <= 0, sub: x.hp > 0 ? `HP ${x.hp} / ${x.max}` : 'たおれている' } }));
+      const items = others.map(x => ({ label: x.name, cb: () => x.hp > 0 ? this.doSwap(x) : null, o: { col: '#9fd4ff', line: '#2f5d8a', off: x.hp <= 0, sub: x.hp > 0 ? `${TYPES[x.type].name}・HP ${x.hp} / ${x.max}` : 'たおれている' } }));
       if (!this.forced) items.push(back);
       this.grid(items, bx, by, bw, bh, m);
     } else if (Talk.active()) Talk.draw(bx, by, bw, bh);
