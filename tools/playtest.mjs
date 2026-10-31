@@ -208,6 +208,56 @@ await press('team:0'); await sleep(150); await shot('school-changed');
 const teamKinds = await ev('JSON.stringify(teamMons().map(m=>m.kind))');
 if (teamKinds.startsWith('["pomuru')) throw new Error('leader not changed: ' + teamKinds);
 await press('とじる'); await sleep(400);
+// まおうの しゅうげき：きょうしつを とじると ムービー → ざこ 3びき → ボス
+const netM0 = await ev('G.nets.m');
+await talkAll(); await waitFor('scene===Movie', 6000);
+for (let c = 0; c < 6; c++) { await waitFor('scene===Movie && Movie.tr<0 && Talk.active()'); await sleep(1200); await shot(`movie3-${c + 1}`); await talkAll(); if (c < 5) await sleep(950); }
+await waitFor('scene===Raid', 6000);
+if (await ev('G.nets.m') !== netM0 + 1) throw new Error('net m not given');
+const leaveBattle = async () => { for (let i = 0; i < 60 && await ev('scene===Battle'); i++) { if (await ev('Talk.active()')) await talkAll(1); else await sleep(150); } };
+const fight = async () => {
+  for (let i = 0; i < 60; i++) {
+    const ph = await ev('scene!==Battle ? "out" : Talk.active() ? "talk" : Battle.phase');
+    if (ph === 'out') break;
+    if (ph === 'talk') { await talkAll(); continue; }
+    if (ph === 'cmd') { await press('わざ'); await press(await ev('Battle.a.moves.find(m=>m.pow).n')); continue; }
+    if (ph === 'swap') { await press(await ev('Battle.allies.find(x=>x!==Battle.a&&x.hp>0).name')); continue; }
+    await sleep(150);
+  }
+};
+const raidBattle = async (name, fn) => { await talkAll(); await waitFor('scene===Battle', 8000); await sleep(600); await shot(name); await talkAll(); await fn(); };
+await raidBattle('raid-zako1', async () => {
+  await waitFor("Battle.phase==='cmd'"); await ev('window._r=Math.random;Math.random=()=>0');
+  await press('とりあみ'); await press(`とりあみ［小］ ×${await ev('G.nets.s')}`); await talkAll(1);
+  await leaveBattle(); await ev('Math.random=window._r');
+});
+await waitFor('scene===Raid', 6000); await shot('raid-after1');
+await raidBattle('raid-zako2', fight); await waitFor('scene===Raid', 6000);
+await raidBattle('raid-zako3', fight); await waitFor('scene===Raid', 6000);
+await raidBattle('raid-boss', async () => {
+  await waitFor("Battle.phase==='cmd'"); const s0 = await ev('G.nets.s');
+  await press('とりあみ'); await press(`とりあみ［小］ ×${s0}`); await sleep(200); await shot('raid-boss-wrongnet'); await talkAll();
+  if (await ev('G.nets.s') !== s0) throw new Error('small net used on medium boss');
+  await waitFor("Battle.phase==='cmd'"); await ev('window._r=Math.random;Math.random=()=>0');
+  await press('とりあみ'); await press(`とりあみ［中］ ×${await ev('G.nets.m')}`); await talkAll(1);
+  await leaveBattle(); await ev('Math.random=window._r');
+});
+await waitFor('scene===Raid && Talk.active()', 6000); await talkAll();
+await waitFor('scene===Market', 6000); await sleep(400); await talkAll(); await sleep(300); await shot('raid-clear');
+const raidBox = await ev('JSON.stringify(G.box.map(m=>m.kind))');
+if (!(await ev('G.cleared.raid')) || !raidBox.includes('gorogante') || !raidBox.includes('pokobom')) throw new Error('raid result wrong: ' + raidBox);
+await press('うらいちばに もどる'); await sleep(600);
+// じぶんと レンの いえ：たなに しまう・だす、ベッドで ねると あさ
+await shop('home', await ev('sub(SHOPS[4].sign)')); await waitFor('scene===Home', 5000); await sleep(500); await shot('home'); await talkAll(); await sleep(500);
+const ns0 = await ev('G.nets.s');
+await press('たな'); await press('しまう:s'); await sleep(150); await shot('home-shelf');
+if (await ev('G.shelf.s') !== 1 || await ev('G.nets.s') !== ns0 - 1) throw new Error('shelf put failed');
+await press('だす:s'); if (await ev('G.shelf.s') !== 0 || await ev('G.nets.s') !== ns0) throw new Error('shelf take failed');
+await press('とじる'); await ev('G.dayClock=300'); await press('ベッド'); await press('ねむる'); await sleep(1200); await shot('home-sleep');
+await waitFor('Talk.active()', 5000); const dayAfter = await ev('G.dayClock');
+if (dayAfter > 5) throw new Error('sleep did not make morning: ' + dayAfter);
+await talkAll(); await sleep(300); await shot('home-morning');
+await press('そとに でる'); await waitFor('scene===Market', 5000); await sleep(500); await shot('market-morning'); await talkAll();
 // たたかいで こうたい
 await ev("Battle.begin({kind:'yellowl',x:0,y:0,alive:true},Hunt)"); await sleep(600); await talkAll();
 await waitFor("Battle.phase==='cmd'"); const k0 = await ev('Battle.a.kind');
@@ -228,8 +278,8 @@ for (let i = 0; i < chapters; i++) {
   const c = await ev(`JSON.stringify(CHAPTERS[${i}])`), ch = JSON.parse(c);
   if (i > 0) { await reload(); await press('ばめんを えらぶ'); }
   await press(`${i + 1}. ${ch.name}`); await sleep(800);
-  const sc = await ev('scene===Movie?"Movie":scene===Field?"Field":scene===Battle?"Battle":scene===Market?"Market":scene===Gather?"Gather":scene===Forge?"Forge":scene===Hunt?"Hunt":"?"');
-  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market' }[ch.id];
+  const sc = await ev('scene===Movie?"Movie":scene===Field?"Field":scene===Battle?"Battle":scene===Market?"Market":scene===Gather?"Gather":scene===Forge?"Forge":scene===Hunt?"Hunt":scene===Home?"Home":scene===Raid?"Raid":"?"');
+  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market', home: 'Home', raid: 'Movie' }[ch.id];
   if (sc !== want) throw new Error(`chapter ${ch.id} went to ${sc}`);
   if (['market', 'gather'].includes(ch.id) && !(await ev('G.gear'))) throw new Error('gear missing in ' + ch.id);
 }
@@ -239,13 +289,13 @@ await reload(); await press('つづきから'); await sleep(200); await shot('sl
 const lab = await ev("(hits.find(h=>h.label&&h.label.startsWith('セーブ1'))||{}).label");
 await press(lab); await sleep(1500); await talkAll(); await shot('loaded');
 const loaded = await ev('JSON.stringify({market: scene===Market, coins:G.coins, box:G.box.length, team:G.team.length, nets:G.nets, slot:Save.slot, name:G.name})');
-if (!loaded.includes('"market":true') || !loaded.includes('"box":3') || !loaded.includes('"slot":1') || !loaded.includes('"coins":100')) throw new Error('load wrong: ' + loaded);
+if (!loaded.includes('"market":true') || JSON.parse(loaded).box < 5 || !loaded.includes('"slot":1') || !loaded.includes('"coins":100')) throw new Error('load wrong: ' + loaded);
 await reload(); await press('はじめから'); await press(lab); await sleep(200); await shot('slots-overwrite');
 if (!(await ev("hits.some(h=>h.label==='いいえ')"))) throw new Error('no overwrite confirm');
 await press('いいえ'); await press('とじる');
 await reload(); await press('あたらしい ところから'); await sleep(800);
 const newest = await ev('NEWEST.id');
-if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
+if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market,home:Home,raid:Movie}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
 await shot('newest');
 console.log(JSON.stringify({ ok: true, name: await ev('G.name'), savedName, allyHp, gear, items, lv, party, shopState, teamKinds, minSpotDist: dist, chapters, newest, loaded, errors }));
 ws.close(); proc.kill();
