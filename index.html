@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>みんなの モントモ</title>
+<!-- ホームがめんに ついか したとき、アプリの ように ぜんがめんで うごく -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="モントモ">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=0.6">
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="namebox" hidden>
+  <div class="card">
+    <p>きみの なまえを いれてね</p>
+    <input id="nameinput" maxlength="6" value="ソラ" autocomplete="off">
+    <button id="nameok">けってい</button>
+  </div>
+</div>
+<!-- ?v= は こうしんした ときに ふるい ファイルが のこらないように する ための ばんごう -->
+<script src="js/game.js?v=0.6"></script>
+</body>
+</html>
