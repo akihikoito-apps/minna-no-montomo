@@ -37,7 +37,7 @@ const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const hash = (i, j) => (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000;
 
 // ゲームの ばんごう（あげる ときは node tools/bump.mjs 0.9 で sw.js・version.json・index.html も いっしょに）
-const GAME_VERSION = '0.9';
+const GAME_VERSION = '0.10';
 
 const G = {
   name: 'ソラ', firstBattle: true, gear: false, bonus: { hp: 0, atk: 0, def: 0 }, quest: null,
@@ -1874,7 +1874,7 @@ const Market = {
   },
   open(id) {
     this.seen[id] = true;
-    if (id === 'quest') this.panel = 'board';
+    if (id === 'quest') { this.panel = 'board'; this.tab = 'todo'; this.page = 0; }
     else if (id === 'shop') this.panel = 'shop';
     else if (id === 'school') this.panel = 'school';
     else if (id === 'home') Fade.to(() => go(Home));
@@ -1932,24 +1932,15 @@ const Market = {
     const kind = this.panel === 'shop' ? 'shop' : this.panel === 'school' ? 'school' : 'quest';
     const title = { shop: 'どうぐや', school: 'モンスター きょうしつ', quest: 'クエスト うけつけ' }[kind];
     const col = { shop: '#3f7cac', school: '#2f9e44', quest: '#e07a5f' }[kind];
-    const pw = Math.min(480, W - 24), ph = Math.min(kind === 'school' ? 520 : 400, H - 40), px = (W - pw) / 2, py = (H - ph) / 2;
+    const full = this.panel === 'board'; // クエストの いちらんは がめん いっぱいに ひろげる
+    const pw = full ? W - 24 : Math.min(480, W - 24), ph = full ? H - 24 : Math.min(kind === 'school' ? 520 : 400, H - 40), px = (W - pw) / 2, py = (H - ph) / 2;
     rr(px, py, pw, ph, 18); ctx.fillStyle = '#fff8e8'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = '#6b4a2b'; ctx.stroke();
     rr(px, py, pw, 52, 18); ctx.fillStyle = col; ctx.fill();
     text(title, px + pw / 2, py + 27, fitPx(title, 24, pw - 40), '#fff');
     const bx = px + 20, bw = pw - 40, half = (bw - 16) / 2;
     const close = () => button(px + pw / 2 - 80, py + ph - 62, 160, 48, 'とじる', () => { const was = this.panel; this.panel = null; this.msg = null; if (was === 'school') this.afterSchool(); }, { col: '#c9d6e8', line: '#4a5a72' });
     if (this.panel === 'board') {
-      text('どの クエストを うける？', px + pw / 2, py + 84, fitPx('どの クエストを うける？', 18, bw), '#4a2500');
-      QUESTS.filter(qq => qq.show()).forEach((qq, i) => {
-        const y = py + 110 + i * 90, done = G.cleared[qq.id];
-        button(bx, y, bw, 78, questTitle(qq), () => done ? Talk.say([{ who: 'うけつけ', t: 'その クエストは もう クリアずみですよ！' }]) : (this.pick = qq, this.panel = 'confirm'),
-          { col: '#ffe08a', sub: done ? 'クリアずみ' : '★'.repeat(qq.star) + ' ' + qq.info, px: 22, blink: !done, off: done });
-        if (qq.special) { // とくべつクエストの リボン
-          rr(bx - 6, y - 12, 126, 26, 8); ctx.fillStyle = '#e63946'; ctx.fill();
-          text('★ とくべつ ★', bx + 57, y + 1, 15, '#fff');
-        }
-      });
-      close();
+      this.drawBoard(px, py, pw, ph);
     } else if (this.panel === 'confirm') {
       const msg = `${questTitle(this.pick)}を うけますか？`;
       text(msg, px + pw / 2, py + ph * 0.38, fitPx(msg, 22, bw), '#4a2500');
@@ -1989,6 +1980,45 @@ const Market = {
       rr(px + 12, py + ph - 108, pw - 24, 36, 12); ctx.fillStyle = '#1f9e8f'; ctx.fill();
       text(this.msg.t, px + pw / 2, py + ph - 90, tp, '#fff');
     }
+  },
+  // クエスト いちらん：したの ボタンで「おわっていない」と「おわった」を きりかえる。おおくて はいらない ときは ページを めくる
+  drawBoard(px, py, pw, ph) {
+    const tab = this.tab || 'todo';
+    const list = QUESTS.filter(q => q.show() && !!G.cleared[q.id] === (tab === 'done'));
+    const head = tab === 'done' ? 'おわった クエスト' : 'どの クエストを うける？';
+    text(head, px + pw / 2, py + 76, fitPx(head, 18, pw - 40), '#4a2500');
+    const top = py + 104, bottom = py + ph - 76;
+    const cols = pw >= 640 ? 2 : 1, gap = 14, cw = (pw - 40 - gap * (cols - 1)) / cols, chh = 72;
+    const rows = Math.max(1, Math.floor((bottom - top + 12) / (chh + 16))), per = rows * cols;
+    const pages = Math.max(1, Math.ceil(list.length / per));
+    this.page = clamp(this.page || 0, 0, pages - 1);
+    list.slice(this.page * per, this.page * per + per).forEach((q, i) => {
+      const x = px + 20 + (i % cols) * (cw + gap), y = top + Math.floor(i / cols) * (chh + 16);
+      const done = !!G.cleared[q.id];
+      button(x, y, cw, chh, questTitle(q), () => done ? Talk.say([{ who: 'うけつけ', t: 'その クエストは もう クリアずみですよ！' }]) : (this.pick = q, this.panel = 'confirm'),
+        { col: done ? '#e9e2d4' : '#ffe08a', sub: done ? '✓ クリアずみ' : '★'.repeat(q.star) + ' ' + q.info, px: 20, blink: !done });
+      if (q.special) { // とくべつクエストの リボン
+        rr(x - 6, y - 12, 126, 26, 8); ctx.fillStyle = '#e63946'; ctx.fill();
+        text('★ とくべつ ★', x + 57, y + 1, 15, '#fff');
+      }
+    });
+    if (!list.length) {
+      const e = tab === 'done' ? 'まだ おわった クエストは ないよ' : 'いまは うけられる クエストは ないよ。つぎを まってね！';
+      text(e, px + pw / 2, (top + bottom) / 2, fitPx(e, 18, pw - 60), '#8a7458');
+    }
+    if (pages > 1) { // ページ めくり
+      const my = (top + bottom) / 2 - 28;
+      if (this.page > 0) button(px + 2, my, 34, 56, '◀', () => { this.page--; }, { col: 'rgba(255,255,255,.9)' });
+      if (this.page < pages - 1) button(px + pw - 36, my, 34, 56, '▶', () => { this.page++; }, { col: 'rgba(255,255,255,.9)' });
+      text(`${this.page + 1} / ${pages}`, px + pw / 2, bottom - 4, 14, '#8a7458');
+    }
+    // した：きりかえ ボタン と とじる
+    const by = py + ph - 64, bh = 50, cbw = Math.min(130, pw * 0.2), tw = Math.min(220, (pw - 60 - cbw) / 2);
+    const nTodo = QUESTS.filter(q => q.show() && !G.cleared[q.id]).length, nDone = QUESTS.filter(q => q.show() && G.cleared[q.id]).length;
+    const sw = (t2) => () => { this.tab = t2; this.page = 0; };
+    button(px + 20, by, tw, bh, `おわっていない（${nTodo}）`, sw('todo'), { col: tab === 'todo' ? '#ffb347' : '#f1ebe0', line: tab === 'todo' ? '#a0680a' : '#b8a888', px: 17 });
+    button(px + 32 + tw, by, tw, bh, `おわった（${nDone}）`, sw('done'), { col: tab === 'done' ? '#9fd4a0' : '#f1ebe0', line: tab === 'done' ? '#2f6b2a' : '#b8a888', px: 17 });
+    button(px + pw - 20 - cbw, by, cbw, bh, 'とじる', () => { this.panel = null; this.msg = null; }, { col: '#c9d6e8', line: '#4a5a72' });
   },
   // どうぐや：とりあみ［小］［中］［大］を コインで かう
   drawShop(px, py, pw, ph, close) {

@@ -157,6 +157,11 @@ const lv = await ev('JSON.stringify({lv:G.lv,bonus:G.bonus,items:G.items})');
 if (!lv.includes('"armor":2') || !lv.includes('"atk":2') || !lv.includes('"hp":10')) throw new Error('upgrade wrong: ' + lv);
 await press('うらいちばへ もどる'); await waitFor('scene===Market', 4000); await sleep(500); await shot('market-nextquest'); await talkAll(); await sleep(600);
 await shop('quest', 'クエスト うけつけ'); await sleep(200); await shot('quest-board2');
+// したの ボタンで おわった クエストに きりかえ → そざいあつめ だけが でる
+await press('おわった（1）'); await sleep(200); await shot('quest-board-done');
+if (!(await ev("hits.some(h=>h.label==='とくべつクエスト「そざいあつめ」') && !hits.some(h=>h.label==='クエスト「トルピーを さがせ」')"))) throw new Error('done tab wrong');
+await press('おわっていない（1）'); await sleep(200);
+if (await ev("hits.some(h=>h.label==='とくべつクエスト「そざいあつめ」')")) throw new Error('todo tab shows cleared quest');
 await press('クエスト「トルピーを さがせ」'); await press('はい'); await sleep(300); await talkAll();
 await waitFor('scene===Hunt', 4000); await sleep(600); await shot('hunt-intro'); await talkAll(); await sleep(300);
 if (await ev('G.nets.s') !== 3) throw new Error('nets not given');
