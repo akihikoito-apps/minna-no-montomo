@@ -37,7 +37,7 @@ const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const hash = (i, j) => (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000;
 
 // ゲームの ばんごう（あげる ときは node tools/bump.mjs 0.9 で sw.js・version.json・index.html も いっしょに）
-const GAME_VERSION = '0.15';
+const GAME_VERSION = '0.16';
 
 const G = {
   name: 'ソラ', firstBattle: true, gear: false, bonus: { hp: 0, atk: 0, def: 0 }, quest: null,
@@ -141,6 +141,17 @@ function drawIgabon(x, y, s, t, flip = false) {
   ctx.beginPath(); ctx.arc(0, s * 0.42, s * 0.16, Math.PI + 0.3, -0.3); ctx.stroke();
   tri(-s * 0.08, s * 0.3, -s * 0.02, s * 0.3, -s * 0.05, s * 0.4, '#fff');
   ctx.restore();
+}
+
+// キングイガボン：イガボンの おうさま（くさ・大きい）。クエストレベル3の ボス
+function drawKingIgabon(x, y, s, t, flip = false) {
+  drawIgabon(x, y, s, t, flip);
+  const b = Math.abs(Math.sin(t * 7)) * s * 0.1, cy = y - s - b - s * 0.95;
+  ctx.fillStyle = '#ffd23f'; ctx.beginPath();
+  ctx.moveTo(x - s * 0.45, cy + s * 0.2); ctx.lineTo(x - s * 0.52, cy - s * 0.3); ctx.lineTo(x - s * 0.22, cy - s * 0.05); ctx.lineTo(x, cy - s * 0.42);
+  ctx.lineTo(x + s * 0.22, cy - s * 0.05); ctx.lineTo(x + s * 0.52, cy - s * 0.3); ctx.lineTo(x + s * 0.45, cy + s * 0.2); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#b8860b'; ctx.lineWidth = s * 0.05; ctx.stroke();
+  for (const [dx, c] of [[-0.25, '#e63946'], [0, '#3a86ff'], [0.25, '#2f9e44']]) circle(x + dx * s, cy + s * 0.08, s * 0.07, c);
 }
 
 // ドンゴラ：チュートリアルの ボス。いわを せおった 小さな トカゲ（ひだりむき）
@@ -489,8 +500,8 @@ function drawHomeFront(x, y, bw, bh, h, t, sign) {
   return { x, y, w: bw, h: bh };
 }
 
-const MONSTER_DRAW = { pomuru: drawPomuru, igabon: drawIgabon, dongora: drawDongora, toruppy: drawToruppy, yellowl: drawYellowl, pokobom: drawPokobom, gorogante: drawGorogante, mogudrill: drawMogudrill, merakoro: drawMerakoro, togesura: drawTogesura, tsumujibat: drawTsumujibat, maou: (x, y, s, t) => drawMaou(x, y, s * 0.8, t) };
-const MONSTER_NAME = { pomuru: 'ポムル', igabon: 'イガボン', dongora: 'ドンゴラ', toruppy: 'トルピー', yellowl: 'イエロール', pokobom: 'ポコボム', gorogante: 'ゴロガンテ', mogudrill: 'モグドリル', merakoro: 'メラコロ', togesura: 'トゲスラ', tsumujibat: 'ツムジバット', maou: 'まおう' };
+const MONSTER_DRAW = { pomuru: drawPomuru, igabon: drawIgabon, dongora: drawDongora, toruppy: drawToruppy, yellowl: drawYellowl, pokobom: drawPokobom, gorogante: drawGorogante, mogudrill: drawMogudrill, merakoro: drawMerakoro, togesura: drawTogesura, tsumujibat: drawTsumujibat, kingigabon: drawKingIgabon, maou: (x, y, s, t) => drawMaou(x, y, s * 0.8, t) };
+const MONSTER_NAME = { pomuru: 'ポムル', igabon: 'イガボン', dongora: 'ドンゴラ', toruppy: 'トルピー', yellowl: 'イエロール', pokobom: 'ポコボム', gorogante: 'ゴロガンテ', mogudrill: 'モグドリル', merakoro: 'メラコロ', togesura: 'トゲスラ', tsumujibat: 'ツムジバット', kingigabon: 'キングイガボン', maou: 'まおう' };
 
 // しゅじんこう
 function drawHero(x, y, s, dir = 'down', ph = 0, moving = false, bag = false) {
@@ -1513,7 +1524,7 @@ function typeEff(atk, def) {
   if (STRONG[def] === atk) return 0.67;
   return 1;
 }
-const MON_TYPE = { pomuru: 'kusa', igabon: 'kusa', dongora: 'iwa', toruppy: 'kaze', yellowl: 'hikari', pokobom: 'kaze', gorogante: 'iwa', mogudrill: 'iwa', merakoro: 'hikari', togesura: 'kusa', tsumujibat: 'kaze', maou: 'normal' };
+const MON_TYPE = { pomuru: 'kusa', igabon: 'kusa', dongora: 'iwa', toruppy: 'kaze', yellowl: 'hikari', pokobom: 'kaze', gorogante: 'iwa', mogudrill: 'iwa', merakoro: 'hikari', togesura: 'kusa', tsumujibat: 'kaze', kingigabon: 'kusa', maou: 'normal' };
 // わざ：type ぞくせい、pow いりょく、acc めいちゅう（1＝かならず）、heal かいふく、fx その ほかの こうか
 //   fx：guard＝つぎに うける ダメージが はんぶん、atkdown＝あいての こうげきを 2 さげる
 const FX_TEXT = { guard: 'つぎの ダメージ はんぶん', atkdown: 'あいての こうげき ダウン' };
@@ -1531,6 +1542,7 @@ const FOES = {
   merakoro: { name: 'メラコロ', hp: 26, lv: 10, catchBase: 0.35, size: 's', moves: [{ n: 'ひのこ ころがり', type: 'hikari', pow: 7, acc: 1 }, { n: 'メラメラ たいあたり', type: 'normal', pow: 6, acc: 1 }] },
   togesura: { name: 'トゲスラ', hp: 30, lv: 10, catchBase: 0.35, size: 's', moves: [{ n: 'トゲトゲ とっしん', type: 'kusa', pow: 7, acc: 0.95 }, { n: 'ぷるぷる ボディ', type: 'normal', pow: 6, acc: 1 }] },
   tsumujibat: { name: 'ツムジバット', hp: 95, lv: 12, catchBase: 0.12, size: 'm', moves: [{ n: 'つむじかぜ', type: 'kaze', pow: 10, acc: 0.9 }, { n: 'キバ アタック', type: 'normal', pow: 9, acc: 1 }, { n: 'ちょうおんぱ', type: 'kaze', pow: 12, acc: 0.75 }] },
+  kingigabon: { name: 'キングイガボン', hp: 150, lv: 16, catchBase: 0.1, size: 'l', moves: [{ n: 'キング ローリング', type: 'kusa', pow: 13, acc: 0.9 }, { n: 'おうさまの ずつき', type: 'normal', pow: 11, acc: 1 }, { n: 'イガイガ あめ', type: 'kusa', pow: 15, acc: 0.7 }] },
   // まおう：HPが 1で とまる（noDie）、つかまえられない（noCatch）
   maou: { name: 'まおう', hp: 110, lv: 30, noDie: true, noCatch: true, size: 'l', moves: [{ n: 'ダーク ビーム', type: 'normal', pow: 10, acc: 0.9 }, { n: 'まおう パンチ', type: 'normal', pow: 9, acc: 1 }, { n: 'まおうの たいほう', type: 'iwa', pow: 13, acc: 0.7 }] },
   toruppy: { name: 'トルピー', hp: 60, lv: 6, catchBase: 0.15, moves: [{ n: 'ギザギザつばさ', type: 'kaze', pow: 7, acc: 1 }, { n: 'やじるしストライク', type: 'normal', pow: 8, acc: 0.85 }, { n: 'キバキバかみつき', type: 'normal', pow: 6, acc: 1 }] },
@@ -1595,6 +1607,13 @@ const ALLIES = {
       { n: 'ちょうおんぱ', type: 'kaze', fx: 'atkdown', acc: 0.9 },
     ]
   },
+  kingigabon: {
+    hp: 90, lv: 16, moves: [
+      { n: 'キング ローリング', type: 'kusa', pow: 14, acc: 0.9 },
+      { n: 'おうさまの ずつき', type: 'normal', pow: 12, acc: 1 },
+      { n: 'トゲの よろい', type: 'kusa', fx: 'guard' },
+    ]
+  },
   gorogante: {
     hp: 70, lv: 8, moves: [
       { n: 'ゴロゴロ ころがり', type: 'iwa', pow: 11, acc: 0.9 },
@@ -1621,7 +1640,7 @@ function typeChip(type, x, y, px) {
   return w;
 }
 const ALLY_FLIP = { dongora: true, gorogante: true, mogudrill: true };            // ひだりむきに かいて ある モンスター
-const ALLY_SCALE = { pomuru: 1.05, dongora: 0.85, toruppy: 0.62, yellowl: 0.85, igabon: 0.9, pokobom: 0.85, gorogante: 0.72, mogudrill: 0.8, merakoro: 0.85, togesura: 0.8, tsumujibat: 0.6 };
+const ALLY_SCALE = { pomuru: 1.05, dongora: 0.85, toruppy: 0.62, yellowl: 0.85, igabon: 0.9, pokobom: 0.85, gorogante: 0.72, mogudrill: 0.8, merakoro: 0.85, togesura: 0.8, tsumujibat: 0.6, kingigabon: 0.7 };
 // とりあみ：大きさ せんよう（［小］は 小さい モンスター だけ）
 const NETS = {
   s: { short: '［小］', price: 100 },
@@ -1630,16 +1649,35 @@ const NETS = {
 };
 const SIZE_NAME = { s: '小さい', m: '中くらいの', l: '大きい' };
 
+// ===== けいけんち と レベル =====
+// たおしたり つかまえたり すると、つれていった なかま みんなが けいけんちを もらう。
+// レベルが 1 あがる ごとに HP +3、2 あがる ごとに こうげき +1、3 あがる ごとに ぼうぎょ +1
+const LV_MAX = 50;
+function monLv(m) { return m.lv || ALLIES[m.kind].lv; }
+function expNeed(lv) { return lv * 15; } // つぎの レベルまでに いる けいけんち
+function lvUp(m) { const d = monLv(m) - ALLIES[m.kind].lv; return { hp: d * 3, atk: Math.floor(d / 2), def: Math.floor(d / 3) }; }
+function expFor(e) { return e.lv * (e.boss ? 10 : 5); }
+// けいけんちを くばって、セリフ（レベルアップ）を かえす
+function giveExp(mons, n) {
+  const lines = [{ t: `なかま みんなが けいけんちを ${n} もらった！` }];
+  for (const m of mons) {
+    m.exp = (m.exp || 0) + n;
+    let lv = monLv(m);
+    while (lv < LV_MAX && m.exp >= expNeed(lv)) { m.exp -= expNeed(lv); lv++; }
+    if (lv > monLv(m)) { m.lv = lv; lines.push({ t: `${MONSTER_NAME[m.kind]}は レベル${lv}に あがった！` }); }
+  }
+  return lines;
+}
 function addMonster(kind) {
-  const m = { uid: ++G.uid, kind };
+  const m = { uid: ++G.uid, kind, lv: ALLIES[kind].lv, exp: 0 };
   G.box.push(m);
   if (G.team.length < 3) G.team.push(m.uid);
   return m;
 }
 function teamMons() { return G.team.map(u => G.box.find(m => m.uid === u)).filter(Boolean); }
 function makeAlly(m) {
-  const d = ALLIES[m.kind], mx = d.hp + G.bonus.hp;
-  return { uid: m.uid, kind: m.kind, type: MON_TYPE[m.kind], name: MONSTER_NAME[m.kind], hp: mx, max: mx, dhp: mx, lv: d.lv, moves: d.moves };
+  const d = ALLIES[m.kind], up = lvUp(m), mx = d.hp + up.hp + G.bonus.hp;
+  return { uid: m.uid, kind: m.kind, type: MON_TYPE[m.kind], name: MONSTER_NAME[m.kind], hp: mx, max: mx, dhp: mx, lv: monLv(m), atkUp: up.atk, defUp: up.def, moves: d.moves };
 }
 
 const Battle = {
@@ -1679,7 +1717,7 @@ const Battle = {
     else if (Math.random() > (m.acc || 1)) lines.push({ t: 'こうげきは はずれた！', fx: () => this.pop('e', 'ミス', '#888') });
     else {
       if (m.pow) {
-        const ef = typeEff(m.type, e.type), d = Math.max(1, Math.round(m.pow * ef) + rnd(-1, 1) + G.bonus.atk);
+        const ef = typeEff(m.type, e.type), d = Math.max(1, Math.round(m.pow * ef) + rnd(-1, 1) + G.bonus.atk + (a.atkUp || 0));
         lines.push({ t: `${e.name}に ${d}の ダメージ！`, fx: () => { e.hp = Math.max((e.boss && this.tut) || e.noDie ? 1 : 0, e.hp - d); this.fx.eH = 0.45; this.pop('e', '-' + d, '#e63946'); } });
         if (ef > 1) lines.push({ t: 'よく きいた！' });
         else if (ef < 1) lines.push({ t: 'あまり きいて いない みたい…' });
@@ -1690,7 +1728,7 @@ const Battle = {
   },
   afterAlly() {
     const e = this.e;
-    if (e.noDie && e.hp <= 1) return this.from.onSpare(); // まおうは HP 1で とまる
+    if (e.noDie && e.hp <= 1) return this.from.onSpare(this.expLines()); // まおうは HP 1で とまる
     if (e.hp <= 0) return this.win();
     if (!this.tut) {
       if (e.hp <= e.max / 2 && !this.halfTip && G.nets[e.size] > 0 && !e.noCatch) {
@@ -1717,7 +1755,7 @@ const Battle = {
     const lines = [{ t: `${e.name}の ${m.n}！`, fx: () => { this.fx.eL = 0.4; } }];
     if (Math.random() > (m.acc || 1)) lines.push({ t: 'こうげきは はずれた！', fx: () => this.pop('a', 'ミス', '#888') });
     else {
-      let d = Math.max(1, Math.round(m.pow * ef) + rnd(-1, 1) - G.bonus.def - e.atkDown);
+      let d = Math.max(1, Math.round(m.pow * ef) + rnd(-1, 1) - G.bonus.def - (a.defUp || 0) - e.atkDown);
       if (this.guard) { d = Math.max(1, Math.round(d / 2)); this.guard = false; lines.push({ t: 'かまえで ダメージが へった！' }); }
       lines.push({ t: `${a.name}に ${d}の ダメージ！`, fx: () => { a.hp = Math.max(0, a.hp - d); this.fx.aH = 0.45; this.pop('a', '-' + d, '#e63946'); } });
       if (ef > 1) lines.push({ t: 'よく きいた！' });
@@ -1787,8 +1825,10 @@ const Battle = {
     if (this.from.noRun) return Talk.say([{ t: 'いまは にげられない！ うらいちばを まもろう！' }], () => this.cmd());
     Talk.say([{ t: 'うまく にげきれた！' }], () => Fade.to(() => { this.from.inv = 1.5; go(this.from); }));
   },
+  // たたかった なかまに けいけんちを くばる
+  expLines() { return giveExp(this.allies.map(a => G.box.find(m => m.uid === a.uid)).filter(Boolean), expFor(this.e)); },
   win() {
-    Talk.say([{ t: `${this.e.name}を たおした！`, fx: () => { this.fx.eF = 0.001; } }], () => Fade.to(() => { this.from.onWin(this.foe); go(this.from); }));
+    Talk.say([{ t: `${this.e.name}を たおした！`, fx: () => { this.fx.eF = 0.001; } }, ...this.expLines()], () => Fade.to(() => { this.from.onWin(this.foe); go(this.from); }));
   },
   update(dt) {
     this.t += dt;
@@ -1809,6 +1849,7 @@ const Battle = {
         Talk.say([
           { t: `やった！ ${e.name}を つかまえた！` },
           { t: inTeam ? `${e.name}が つれていく なかまに くわわった！` : `${e.name}は うらいちばの モンスターきょうしつで まっているよ。` },
+          ...this.expLines(),
         ], () => Fade.to(() => { if (this.from.caught) this.from.caught.push(e.kind); this.from.onWin(this.foe, true); go(this.from); }));
       }
     }
@@ -1910,7 +1951,7 @@ const Battle = {
     }
     const pw = Math.min(260, W * 0.44);
     this.panel(14, 14, pw, e, false);
-    if (e.boss) text('ボス', 14 + pw - 92, 14 + 17, 14, '#fff', 'center', '#b0241b');
+    if (e.boss) { rr(18, 14 + 58, 52, 22, 8); ctx.fillStyle = '#b0241b'; ctx.fill(); text('ボス', 44, 14 + 69, 14, '#fff'); }
     this.panel(W - pw - 14, g.AH - 80, pw, a, true);
     // つれてきた なかまの げんき（まる）
     this.allies.forEach((x, i) => circle(W - pw - 14 + 14 + i * 18, g.AH - 92, 6, x.hp > 0 ? (x === a ? '#ffd23f' : '#3ccf5a') : '#888'));
@@ -1988,6 +2029,12 @@ const QUESTS = [
   { id: 'hunt', name: 'トルピーを さがせ', lv: 1, info: 'そうげんで あばれる トルピーを たおすか つかまえよう', show: () => G.lv.weapon > 1 },
   { id: 'saisyu', name: 'もりの そざいあつめ', lv: 1, repeat: true, info: 'しずかな もりで そざいを さがそう（なんかいでも うけられる）', show: () => !!G.cleared.sozai },
   { id: 'mori', name: 'もりの ポコボムを おいはらえ', lv: 1, info: 'もりに のこった ポコボムを 3びき たおすか つかまえよう', show: () => !!G.cleared.raid },
+  // まおうが にげた あと（wave：たいりょう はっせい）
+  { id: 'wave_yellowl', name: 'そうげんの イエロール たいじ', lv: 1, wave: true, info: 'そうげんで ふえた イエロールを 4ひき たおすか つかまえよう', show: () => !!G.cleared.island },
+  { id: 'wave_togesura', name: 'もりの トゲスラ たいじ', lv: 1, wave: true, info: 'もりに あふれた トゲスラを 3びき たおすか つかまえよう', show: () => !!G.cleared.island },
+  { id: 'wave_merakoro', name: 'ほのおの たにの メラコロ', lv: 2, wave: true, info: 'ほのおの たにの メラコロを 4ひき たおすか つかまえよう', show: () => !!G.cleared.island },
+  { id: 'wave_gorogante', name: 'あばれ ゴロガンテ', lv: 2, wave: true, info: 'いわやまで あばれる ゴロガンテを たおすか つかまえよう', show: () => !!G.cleared.island },
+  { id: 'wave_king', name: 'キングイガボンを たおせ', lv: 3, wave: true, info: 'たいりょう はっせいの おやぶん キングイガボンを たおすか つかまえよう', show: () => !!G.cleared.island },
   { id: 'iwayama', name: 'いわやまの モグドリル', lv: 2, info: 'いわやまの おくに いる モグドリルを たおすか つかまえよう', show: () => !!G.cleared.raid },
 ];
 const QLV_WORD = { 1: 'かんたん', 2: 'すこし むずかしい', 3: 'むずかしい', 4: 'とても むずかしい', 5: 'すごく むずかしい' };
@@ -2043,8 +2090,9 @@ const Market = {
       Talk.say([
         { who: 'うけつけ', t: 'おかえりなさい！ まおうを おいはらったんですね！ すごい！' },
         { who: 'レン', t: 'でも まおうは「つぎは ほんきで たたかう」って…。もっと つよく なっておこう！' },
-        { t: '（つづきは これから つくるよ！ おたのしみに！）' },
+        ...WAVE_LINES,
       ]);
+      this.seen.wave = true;
     } else if (back === 'replay') {
       Talk.say([
         { who: 'うけつけ', t: 'おかえりなさい！ クエスト クリア です！' },
@@ -2070,6 +2118,9 @@ const Market = {
         { t: `クリア ボーナスで さらに ${CLEAR_BONUS}コイン もらった！`, fx: () => { G.coins += CLEAR_BONUS; } },
         ...(canCraft() ? [{ who: 'レン', t: 'そざいが そろったね！ かじやで あたらしい そうびを つくって もらおう！' }] : []),
       ], () => { this.panel = 'qdone'; });
+    } else if (G.cleared.island && !this.seen.wave) { // まおうが にげた あとに はじめて きた とき（まえの セーブ）
+      this.seen.wave = true;
+      Talk.say(WAVE_LINES);
     } else if (G.cleared.raid && !this.seen.newq) { // まおうの あとに はじめて きた とき（まえの セーブ）
       this.seen.newq = true;
       Talk.say(NEWQ_LINES);
@@ -2091,6 +2142,7 @@ const Market = {
     if (!G.cleared.raid) return 'school';         // きょうしつを とじると まおうが くる
     if (canCraft()) return 'smith';               // そざいが そろったら かじやで そうびを つくる
     if (G.cleared.invite && !G.cleared.island) return 'road'; // しょうたい された → ひかりの みちへ
+    if (G.cleared.island && QUESTS.some(q => q.wave && !G.cleared[q.id])) return 'quest'; // たいりょう はっせい
     if (!G.cleared.mori || !G.cleared.iwayama) return 'quest'; // うけつけで あたらしい クエストが まっている
     if (!this.seen.home) return 'home';
     return null;
@@ -2307,7 +2359,7 @@ const Market = {
       if (i === 0 && m) { rr(x + 8, ty + 4, 46, 18, 6); ctx.fillStyle = '#ffb347'; ctx.fill(); text('せんとう', x + 31, ty + 13, 11, '#4a2500'); }
       if (m) {
         MONSTER_DRAW[m.kind](x + sw / 2, ty + sh * 0.72, sh * 0.2 * (ALLY_SCALE[m.kind] || 1), t + i, !!ALLY_FLIP[m.kind]);
-        text(MONSTER_NAME[m.kind], x + sw / 2, ty + sh * 0.88, fitPx(MONSTER_NAME[m.kind], 14, sw - 16), '#3a2410');
+        { const nm = `${MONSTER_NAME[m.kind]} Lv${monLv(m)}`; text(nm, x + sw / 2, ty + sh * 0.88, fitPx(nm, 14, sw - 16), '#3a2410'); }
         hits.push({ x: x + 4, y: ty, w: sw - 8, h: sh, label: `team:${i}`, cb: () => this.toggle(m) });
       } else text('あき', x + sw / 2, ty + sh / 2, 16, '#a89878');
     }
@@ -2317,7 +2369,7 @@ const Market = {
       const x = px + 20 + (i % cols) * cw, y = gy0 + Math.floor(i / cols) * ch, inTeam = G.team.includes(m.uid);
       rr(x + 3, y, cw - 6, ch - 6, 10); ctx.fillStyle = inTeam ? '#fff3c4' : '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = inTeam ? '#ffb347' : '#d9c3a0'; ctx.stroke();
       MONSTER_DRAW[m.kind](x + cw / 2, y + ch * 0.62, ch * 0.17 * (ALLY_SCALE[m.kind] || 1), t + i * 0.7, !!ALLY_FLIP[m.kind]);
-      text(MONSTER_NAME[m.kind], x + cw / 2, y + ch * 0.8, fitPx(MONSTER_NAME[m.kind], 12, cw - 12), '#3a2410');
+      { const nm = `${MONSTER_NAME[m.kind]} Lv${monLv(m)}`; text(nm, x + cw / 2, y + ch * 0.8, fitPx(nm, 12, cw - 12), '#3a2410'); }
       if (inTeam) text('✓', x + cw - 16, y + 12, 14, '#2f9e44');
       hits.push({ x: x + 3, y, w: cw - 6, h: ch - 6, label: `box:${m.kind}:${i}`, cb: () => this.toggle(m) });
     });
@@ -2777,6 +2829,81 @@ const QFIELDS = {
     reward: { coins: 600, items: { iron: 4, vine: 3, gem: 2 } },
   },
 };
+// モンスター たいりょう はっせい の クエスト（まおうが にげた あと）
+const WAVE_LINES = [
+  { who: 'うけつけ', t: 'たいへんです！ まおうが にげた あと、あちこちで モンスターが たいりょう はっせい して います！' },
+  { who: 'うけつけ', t: 'クエストを 5つ だしますね。クエストレベル1が 2つ、レベル2が 2つ、そして レベル3が 1つです！' },
+  { who: 'レン', t: 'よし、かたっぱしから かたづけよう！ たたかうと なかまも けいけんちで つよく なるよ！' },
+];
+const WAVE_ROCKS = [[450, 1350, 60], [1950, 1300, 65], [800, 900, 55], [1650, 850, 60]];
+Object.assign(QFIELDS, {
+  wave_yellowl: {
+    w: 2400, h: 1900, start: { x: 1200, y: 1780 }, outer: '#2f6b38', ground: '#b5e07a', tuft: '#8cc65a', treeSkip: 7, rocks: WAVE_ROCKS,
+    foes: [
+      { kind: 'yellowl', hx: 600, hy: 1500 }, { kind: 'yellowl', hx: 1800, hy: 1500 }, { kind: 'yellowl', hx: 1200, hy: 1200 },
+      { kind: 'yellowl', hx: 500, hy: 700 }, { kind: 'yellowl', hx: 1900, hy: 700 }, { kind: 'yellowl', hx: 1200, hy: 400 },
+      { kind: 'igabon', hx: 800, hy: 1100 }, { kind: 'igabon', hx: 1600, hy: 1100 },
+    ],
+    goal: { kind: 'yellowl', n: 4 },
+    accept: [{ who: 'うけつけ', t: 'そうげんで イエロールが たくさん ふえて いるそうです。4ひき おねがいします！' }, { who: 'レン', t: 'いこう、{N}！' }],
+    intro: [{ t: 'そうげんに ついた！' }, { who: 'レン', t: 'イエロールが いっぱいだ！ 4ひき たおすか つかまえよう！' }],
+    reward: { coins: 200, items: { vine: 2, iron: 1 } },
+  },
+  wave_togesura: {
+    w: 2200, h: 1800, start: { x: 1100, y: 1680 }, outer: '#24502b', ground: '#7fbf5a', tuft: '#5f9e44', treeSkip: 4, rocks: [[500, 1200, 50], [1700, 1100, 55], [1100, 700, 45]],
+    foes: [
+      { kind: 'togesura', hx: 500, hy: 1450 }, { kind: 'togesura', hx: 1650, hy: 1450 }, { kind: 'togesura', hx: 450, hy: 800 },
+      { kind: 'togesura', hx: 1750, hy: 750 }, { kind: 'pokobom', hx: 1100, hy: 1050 }, { kind: 'pokobom', hx: 1100, hy: 350 },
+    ],
+    goal: { kind: 'togesura', n: 3 },
+    accept: [{ who: 'うけつけ', t: 'しずかな もりの となりの もりに、トゲスラが あふれて いるんです。' }, { who: 'レン', t: 'トゲスラは「くさ」の モンスターだね。いこう！' }],
+    intro: [{ t: 'もりに ついた！' }, { who: 'レン', t: 'むらさきの トゲスラを 3びき たおすか つかまえよう！' }],
+    reward: { coins: 200, items: { vine: 3, gem: 1 } },
+  },
+  wave_merakoro: {
+    w: 2400, h: 1900, start: { x: 1200, y: 1780 }, outer: '#3a1f18', ground: '#9a6448', tuft: '#6b3f2e', pebbles: true, treeSkip: 9, rocks: WAVE_ROCKS,
+    foes: [
+      { kind: 'merakoro', hx: 600, hy: 1450 }, { kind: 'merakoro', hx: 1800, hy: 1450 }, { kind: 'merakoro', hx: 1200, hy: 1100 },
+      { kind: 'merakoro', hx: 500, hy: 650 }, { kind: 'merakoro', hx: 1900, hy: 650 },
+      { kind: 'pokobom', hx: 900, hy: 400 }, { kind: 'pokobom', hx: 1500, hy: 400 },
+    ],
+    goal: { kind: 'merakoro', n: 4 },
+    accept: [{ who: 'うけつけ', t: 'ほのおの たにで メラコロが どんどん ふえて います。すこし むずかしいですよ！' }, { who: 'レン', t: 'あつそう…。げんき ドリンクを もって いこう！' }],
+    intro: [{ t: 'ほのおの たにに ついた！' }, { who: 'レン', t: 'あつい！ メラコロを 4ひき たおすか つかまえよう！' }],
+    reward: { coins: 400, items: { iron: 3, gem: 2 } },
+  },
+  wave_gorogante: {
+    w: 2400, h: 1900, start: { x: 1200, y: 1780 }, outer: '#5c4a38', ground: '#cdb48a', tuft: '#a88d66', pebbles: true, treeSkip: 8,
+    rocks: [[450, 1350, 70], [1950, 1300, 75], [800, 950, 60], [1650, 850, 65], [400, 500, 70], [2000, 450, 60]], clearing: { x: 1200, y: 300 },
+    foes: [
+      { kind: 'pokobom', hx: 600, hy: 1550 }, { kind: 'pokobom', hx: 1800, hy: 1550 }, { kind: 'yellowl', hx: 1200, hy: 1400 },
+      { kind: 'togesura', hx: 500, hy: 950 }, { kind: 'togesura', hx: 1900, hy: 950 },
+      { kind: 'gorogante', hx: 1200, hy: 300, boss: true },
+    ],
+    goal: { boss: true },
+    accept: [{ who: 'うけつけ', t: 'いわやまで ゴロガンテが あばれて います！ 中くらいの モンスター なので、つかまえるなら［中］の あみですよ。' }, { who: 'レン', t: 'まおうの てしただった ゴロガンテか…。いこう！' }],
+    intro: [{ t: 'いわやまに ついた！' }, { who: 'レン', t: 'ゴロガンテは やまの いちばん おく。「くさ」の わざが よく きくよ！' }],
+    reward: { coins: 400, items: { iron: 4, vine: 2 } },
+  },
+  wave_king: {
+    w: 2600, h: 2100, start: { x: 1300, y: 1980 }, outer: '#173a1c', ground: '#5f9a4f', tuft: '#3f7a35', treeSkip: 5, clearing: { x: 1300, y: 330 },
+    rocks: [[500, 1500, 60], [2100, 1450, 65], [900, 900, 55], [1700, 950, 55]],
+    foes: [
+      { kind: 'igabon', hx: 700, hy: 1700 }, { kind: 'igabon', hx: 1900, hy: 1700 }, { kind: 'togesura', hx: 1300, hy: 1450 },
+      { kind: 'merakoro', hx: 600, hy: 1100 }, { kind: 'merakoro', hx: 2000, hy: 1100 }, { kind: 'togesura', hx: 1300, hy: 900 },
+      { kind: 'igabon', hx: 800, hy: 550 }, { kind: 'igabon', hx: 1800, hy: 550 },
+      { kind: 'kingigabon', hx: 1300, hy: 330, boss: true },
+    ],
+    goal: { boss: true },
+    accept: [
+      { who: 'うけつけ', t: 'たいりょう はっせいの おやぶんが わかりました。おおきな「キングイガボン」です！' },
+      { who: 'うけつけ', t: 'クエストレベル3、とても つよいですよ。大きい モンスター なので、つかまえるなら とりあみ［大］が いります。' },
+      { who: 'レン', t: 'さいごの おおしごとだ！ げんき ドリンクも わすれずに！' },
+    ],
+    intro: [{ t: 'ふかい もりに ついた！' }, { who: 'レン', t: 'もりの いちばん おくに、おうかんを かぶった キングイガボンが いる…！' }, { who: 'レン', t: '「くさ」の モンスターだから、「いわ」の わざは あまり きかないかも。きを つけて！' }],
+    reward: { coins: 800, items: { iron: 5, vine: 4, gem: 3 } },
+  },
+});
 const QF_SIZE = { igabon: 26, yellowl: 28, pokobom: 28, merakoro: 26, togesura: 26 }; // フィールドで かく おおきさ（ボスは 52）
 function questTrees(q) {
   if (q.trees) return q.trees;
@@ -3091,11 +3218,12 @@ const Castle = {
   },
   onWin(foe) { if (foe.kind === 'tsumujibat') this.step = 'stairs'; },
   // まおうの HPが 1に なった
-  onSpare() {
+  onSpare(ex = []) {
     Talk.say([
       { who: 'まおう', t: 'ぐぬぬ…！ ここまで やるとは…！' },
       { who: 'まおう', t: 'きょうは この くらいに しておいて やる。つぎは ほんきで たたかって やるからな！' },
       { who: 'まおう', t: 'フハハハハ…！' },
+      ...ex,
       { t: 'まおうは どこかへ とんで いった！' },
     ], () => Fade.to(() => { this.step = 'end'; go(Castle); }));
   },
@@ -3856,7 +3984,8 @@ const CHAPTERS = [
   { id: 'raid', name: 'まおうの しゅうげき' },
   { id: 'quests2', name: 'あたらしい クエスト と てつの そうび' },
   { id: 'invite', name: 'まおうの しまへ しょうたい（ムービー）' },
-  { id: 'island', name: 'まおうの しま と まおうじょう', isNew: true },
+  { id: 'island', name: 'まおうの しま と まおうじょう' },
+  { id: 'wave', name: 'モンスター たいりょう はっせい（クエスト 5つ）', isNew: true },
 ];
 const NEWEST = CHAPTERS.find(c => c.isNew) || CHAPTERS[CHAPTERS.length - 1];
 function startAt(id) {
@@ -3869,6 +3998,7 @@ function startAt(id) {
   if (past('raid')) { G.cleared.raid = true; G.coins = 100; G.nets.s = 2; Market.seen.shop = true; Market.seen.home = true; addMonster('pokobom'); addMonster('gorogante'); }
   if (past('quests2')) { G.cleared.saisyu = true; G.cleared.mori = true; G.cleared.iwayama = true; G.owned = { iron_sword: true, iron_armor: true }; G.equip = { weapon: 'iron_sword', armor: 'iron_armor' }; G.coins = 700; addMonster('mogudrill'); }
   if (past('invite')) { G.cleared.invite = true; G.bag = { potion: 3 }; }
+  if (past('island')) { G.cleared.island = true; G.coins = 900; }
   recalcBonus();
   if (id === 'movie') Movie.play(CARDS, () => go(Field));
   else if (id === 'field') go(Field);
@@ -3884,6 +4014,7 @@ function startAt(id) {
   else if (id === 'quests2') { Market.back = 'raid'; go(Market); }
   else if (id === 'invite') playInvite();
   else if (id === 'island') IslandField.start();
+  else if (id === 'wave') { Market.back = 'island'; go(Market); }
   else if (id === 'town2') { go(Market); Talk.say([{ who: 'レン', t: 'どうぐやで とりあみが かえるように なったよ。「モンスター きょうしつ」では、つれていく なかまを えらべるよ！' }]); }
   else return false;
   return true;
@@ -3924,6 +4055,7 @@ const Save = {
     if (d.cp === 'movie') return 'さいしょの ムービー';
     if (d.cp === 'field') return 'おそわれた まち';
     if (d.cp === 'movie2') return 'うらいちば ムービー';
+    if (g.cleared.wave_king) return 'キングイガボンを たおした';
     if (g.cleared.island) return 'まおうを おいはらった';
     if (g.cleared.invite) return 'まおうの しまへ しょうたい された';
     if (g.cleared.iwayama) return 'モグドリルの クエスト クリア';

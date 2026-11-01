@@ -361,7 +361,22 @@ if (await ev('Battle.e.hp') !== 1) throw new Error('maou hp should stop at 1: ' 
 await waitFor('scene===Castle', 6000); await sleep(500); await shot('castle-end'); await talkAll();
 await waitFor('scene===Market', 6000); await sleep(400); await shot('island-back'); await talkAll();
 if (!(await ev('G.cleared.island'))) throw new Error('island not cleared');
-await shop('quest', 'クエスト うけつけ'); await press('おわった（4）'); await sleep(200); await shot('quest-board-done4'); await press('とじる');
+// たいりょう はっせい：クエスト 5つ（Lv1×2・Lv2×2・Lv3×1）→ レベル3 を あそぶ。たおすと けいけんちで レベルアップ
+const waveLv = await ev("JSON.stringify(QUESTS.filter(q=>q.wave&&q.show()).map(q=>q.lv))");
+if (waveLv !== '[1,1,2,2,3]') throw new Error('wave quests wrong: ' + waveLv);
+await shop('quest', 'クエスト うけつけ'); await sleep(300); await shot('wave-board');
+const lv0 = await ev('monLv(teamMons()[0])'), coinsW = await ev('G.coins');
+if (!(await ev("hits.some(h=>h.label==='クエスト「キングイガボンを たおせ」')"))) { await press('▶'); await sleep(200); await shot('wave-board-p2'); }
+await press('クエスト「キングイガボンを たおせ」'); await sleep(200); await shot('wave-confirm-lv3'); await press('はい'); await talkAll();
+await waitFor('scene===QuestField', 4000); await sleep(500); await shot('wave-king-intro'); await talkAll(); await sleep(300);
+await qfBattle(8, 'wave-king', async () => { await waitFor("Battle.phase==='cmd'"); await ev('Battle.e.hp=3'); await fight(); });
+await waitFor('scene===QuestField && Talk.active()', 6000); await talkAll();
+await waitFor('scene===Market', 6000); await sleep(400); await talkAll(); await sleep(300); await shot('wave-king-reward');
+if (!(await ev('G.cleared.wave_king')) || await ev('G.coins') !== coinsW + 900) throw new Error('king reward wrong');
+if (await ev('monLv(teamMons()[0])') <= lv0) throw new Error('no level up: ' + lv0);
+await press('うらいちばに もどる'); await sleep(300);
+await shop('school', 'モンスター きょうしつ'); await sleep(300); await shot('school-levels'); await press('とじる'); await sleep(300);
+await shop('quest', 'クエスト うけつけ'); await press('おわった（5）'); await sleep(200); await shot('quest-board-done5'); await press('とじる');
 const gearState = await ev('JSON.stringify({eq:G.equip,bonus:G.bonus,items:G.items,coins:G.coins})');
 // なんかいでも うけられる そざいあつめ：2こ とって とちゅうで かえる → そざいは もらえる
 const it0 = await ev('G.items.iron+G.items.vine+G.items.gem');
@@ -375,7 +390,7 @@ await waitFor('scene===Market', 5000); await sleep(400); await shot('free-gather
 if (await ev('G.items.iron+G.items.vine+G.items.gem') !== it0 + 2) throw new Error('gathered items not kept');
 // もういちど：おわった クエストは ほうしゅう なしで できる
 const coinsR = await ev('G.coins');
-await shop('quest', 'クエスト うけつけ'); await press('おわった（4）'); await press('クエスト「もりの ポコボムを おいはらえ」'); await sleep(200); await shot('replay-confirm');
+await shop('quest', 'クエスト うけつけ'); await press('おわった（5）'); await press('クエスト「もりの ポコボムを おいはらえ」'); await sleep(200); await shot('replay-confirm');
 await press('はい'); await talkAll(); await waitFor('scene===QuestField', 4000); await sleep(400); await talkAll();
 await ev("QuestField.foes.filter(f=>f.kind==='pokobom').slice(0,3).forEach(f=>QuestField.onWin(f))");
 await waitFor('scene===QuestField && Talk.active()', 4000); await talkAll();
@@ -407,7 +422,7 @@ for (let i = 0; i < chapters; i++) {
   if (i > 0) { await reload(); await press('ばめんを えらぶ'); }
   await press(`${i + 1}. ${ch.name}`); await sleep(800);
   const sc = await ev('scene===Movie?"Movie":scene===Field?"Field":scene===Battle?"Battle":scene===Market?"Market":scene===Gather?"Gather":scene===Forge?"Forge":scene===Hunt?"Hunt":scene===Home?"Home":scene===Raid?"Raid":scene===IslandField?"IslandField":"?"');
-  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market', home: 'Home', raid: 'Movie', quests2: 'Market', invite: 'Movie', island: 'IslandField' }[ch.id];
+  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market', home: 'Home', raid: 'Movie', quests2: 'Market', invite: 'Movie', island: 'IslandField', wave: 'Market' }[ch.id];
   if (sc !== want) throw new Error(`chapter ${ch.id} went to ${sc}`);
   if (['market', 'gather'].includes(ch.id) && !(await ev('G.gear'))) throw new Error('gear missing in ' + ch.id);
 }
@@ -417,13 +432,13 @@ await reload(); await press('つづきから'); await sleep(200); await shot('sl
 const lab = await ev("(hits.find(h=>h.label&&h.label.startsWith('セーブ1'))||{}).label");
 await press(lab); await sleep(1500); await talkAll(); await shot('loaded');
 const loaded = await ev('JSON.stringify({market: scene===Market, coins:G.coins, box:G.box.length, team:G.team.length, nets:G.nets, slot:Save.slot, name:G.name})');
-if (!loaded.includes('"market":true') || JSON.parse(loaded).box < 5 || !loaded.includes('"slot":1') || !loaded.includes('"coins":900')) throw new Error('load wrong: ' + loaded);
+if (!loaded.includes('"market":true') || JSON.parse(loaded).box < 5 || !loaded.includes('"slot":1') || !loaded.includes('"coins":1800')) throw new Error('load wrong: ' + loaded);
 await reload(); await press('はじめから'); await press(lab); await sleep(200); await shot('slots-overwrite');
 if (!(await ev("hits.some(h=>h.label==='いいえ')"))) throw new Error('no overwrite confirm');
 await press('いいえ'); await press('とじる');
 await reload(); await press('あたらしい ところから'); await sleep(800);
 const newest = await ev('NEWEST.id');
-if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market,home:Home,raid:Movie,quests2:Market,invite:Movie,island:IslandField}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
+if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market,home:Home,raid:Movie,quests2:Market,invite:Movie,island:IslandField,wave:Market}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
 await shot('newest');
 console.log(JSON.stringify({ ok: true, gearState, name: await ev('G.name'), savedName, allyHp, gear, items, lv, party, shopState, teamKinds, minSpotDist: dist, chapters, newest, loaded, errors }));
 ws.close(); proc.kill();
