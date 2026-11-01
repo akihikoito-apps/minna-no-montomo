@@ -37,7 +37,7 @@ const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const hash = (i, j) => (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000;
 
 // ゲームの ばんごう（あげる ときは node tools/bump.mjs 0.9 で sw.js・version.json・index.html も いっしょに）
-const GAME_VERSION = '0.13';
+const GAME_VERSION = '0.14';
 
 const G = {
   name: 'ソラ', firstBattle: true, gear: false, bonus: { hp: 0, atk: 0, def: 0 }, quest: null,
@@ -1868,6 +1868,7 @@ const HUNT_REWARD = 500; // クエスト「トルピーを さがせ」の ほ�
 const Market = {
   t: 0, panel: null, greeted: false, back: null, sx: 0, tx: 0, drag: null, seen: {}, msg: null,
   enter() {
+    if (!this.back && inviteReady()) return playInvite(); // てつの そうびが そろったら まおうの しょうたい ムービー
     this.t = 0; this.panel = null; this.msg = null; this.drag = null; this.saveT = 0;
     Save.write('market');
     const back = this.back; this.back = null;
@@ -1896,6 +1897,11 @@ const Market = {
         { who: 'レン', t: 'まおう、また くるかも しれない。もっと つよく ならなきゃ！' },
         ...NEWQ_LINES,
       ], () => { this.panel = 'done3'; });
+    } else if (back === 'invite') {
+      Talk.say([
+        { who: 'レン', t: 'まおうの しまか…。じゅんびが できたら、ひかりの みちから いこう！' },
+        { t: '（まおうの しまの ぼうけんは、これから つくるよ！ おたのしみに！）' },
+      ]);
     } else if (back === 'replay') {
       Talk.say([
         { who: 'うけつけ', t: 'おかえりなさい！ クエスト クリア です！' },
@@ -3232,6 +3238,161 @@ const CARDS3 = [
   },
 ];
 
+// まおうじょう（まおうの しまの おく）。x,y は じめんの まんなか、s は たかさ
+function drawMaouCastle(x, y, s, t) {
+  ctx.save(); ctx.translate(x, y);
+  const dark = '#2a1d3a', wall = '#3b2a4f', roof = '#7a1f3d', glow = 0.6 + Math.sin(t * 3) * 0.3;
+  const tower = (tx, tw, th) => {
+    ctx.fillStyle = dark; ctx.fillRect((tx - tw / 2) * s, -th * s, tw * s, th * s);
+    tri((tx - tw / 2 - 0.05) * s, -th * s, (tx + tw / 2 + 0.05) * s, -th * s, tx * s, -(th + 0.38) * s, roof);
+    ctx.fillStyle = `rgba(255,80,60,${glow})`; rr((tx - 0.035) * s, -(th - 0.18) * s, 0.07 * s, 0.12 * s, 0.03 * s); ctx.fill();
+  };
+  tower(-0.55, 0.22, 0.85); tower(0.55, 0.22, 0.85);
+  ctx.fillStyle = wall; ctx.fillRect(-s * 0.42, -s * 0.62, s * 0.84, s * 0.62);
+  for (let i = 0; i < 7; i++) ctx.fillRect(-s * 0.42 + i * s * 0.135, -s * 0.7, s * 0.07, s * 0.08);
+  tower(0, 0.3, 1.15);
+  ctx.fillStyle = `rgba(255,80,60,${glow})`;
+  for (const wx of [-0.27, 0.2]) { rr(wx * s, -s * 0.48, s * 0.07, s * 0.1, s * 0.03); ctx.fill(); }
+  ctx.fillStyle = '#120b1a'; ctx.beginPath(); ctx.moveTo(-s * 0.1, 0); ctx.lineTo(-s * 0.1, -s * 0.18); ctx.arc(0, -s * 0.18, s * 0.1, Math.PI, 0); ctx.lineTo(s * 0.1, 0); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#555'; ctx.lineWidth = s * 0.015; ctx.beginPath(); ctx.moveTo(0, -s * 1.53); ctx.lineTo(0, -s * 1.75); ctx.stroke();
+  ctx.fillStyle = '#9b1c2e'; ctx.beginPath(); ctx.moveTo(0, -s * 1.75); ctx.lineTo(s * 0.16, -s * 1.7 + Math.sin(t * 5) * s * 0.02); ctx.lineTo(0, -s * 1.64); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+// まおうの しまの じめん（ムービー 5・6）。おくに まおうじょう、みちに てした
+function drawIslandLand(w, h, t, near) {
+  sky(w, h, '#2a1640', '#a0405a');
+  for (let k = 0; k < 16; k++) circle((hash(k, 3) / 1000) * w, (hash(k, 8) / 1000) * h * 0.4, 1.5, 'rgba(255,255,255,.6)');
+  const hy = h * 0.55;
+  ctx.fillStyle = '#3d4a35'; ctx.fillRect(0, hy, w, h - hy);
+  ctx.fillStyle = '#6b5a45'; ctx.beginPath(); // おくへ つづく みち
+  ctx.moveTo(w * 0.3, h); ctx.quadraticCurveTo(w * 0.45, h * 0.75, w * 0.48, hy); ctx.lineTo(w * 0.52, hy); ctx.quadraticCurveTo(w * 0.6, h * 0.75, w * 0.7, h); ctx.closePath(); ctx.fill();
+  for (const [x, y, r] of [[0.12, 0.62, 0.05], [0.85, 0.6, 0.06], [0.2, 0.8, 0.07], [0.9, 0.85, 0.08]]) drawRock(w * x, h * y, h * r);
+  drawMaouCastle(w * 0.5, hy + h * 0.02, h * (near ? 0.36 : 0.24), t);
+  const s = Math.min(h * 0.13, w * 0.12);
+  drawPokobom(w * 0.36, h * 0.6 + Math.sin(t * 2) * h * 0.02, s * 0.22, t);
+  drawPokobom(w * 0.66, h * 0.58 + Math.sin(t * 2 + 1) * h * 0.02, s * 0.22, t + 1);
+  drawGorogante(w * 0.64, h * 0.64, s * 0.3, t, true);
+  drawMogudrill(w * 0.34, h * 0.66, s * 0.28, t);
+}
+// ===== ムービー：まおうの しまへ しょうたい（てつの そうびを ふたつ つくった あと） =====
+const CARDS4 = [
+  { // 1. まおうが すいしょうだまで ふたりを みている
+    lines: [
+      { who: 'まおう', t: 'ほう…。あの ふたり、わしの てしたを つぎつぎと たおして おるな。' },
+      { who: 'まおう', t: 'ポコボムも、モグドリルまでも…。' },
+    ],
+    draw(w, h, t) {
+      sky(w, h, '#1e1633', '#5a2f5f');
+      for (let k = 0; k < 20; k++) circle((hash(k, 9) / 1000) * w, (hash(k, 4) / 1000) * h * 0.5, 1.5, 'rgba(255,255,255,.7)');
+      const iw = Math.min(w * 0.7, h * 1.1);
+      drawIsland(w * 0.42, h * 0.62, iw, t);
+      drawMaou(w * 0.3, h * 0.62, h * 0.16, t);
+      // すいしょうだま の なかに ふたりの たたかい
+      const bx = w * 0.62, by = h * 0.4, r = Math.min(w, h) * 0.2;
+      ctx.fillStyle = '#5a3a2a'; ctx.fillRect(bx - r * 0.25, by + r * 0.8, r * 0.5, h * 0.62 - by - r * 0.8);
+      ctx.save(); ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.clip();
+      sky(w, h, '#8fd6ff', '#d8f1ff');
+      ctx.fillStyle = '#7fbf5a'; ctx.fillRect(bx - r, by + r * 0.2, r * 2, r);
+      drawHero(bx - r * 0.45, by + r * 0.55, r * 0.3, 'right', t * 12, true);
+      drawRen(bx - r * 0.1, by + r * 0.55, r * 0.3, t, false);
+      const hit = (t % 1.2) < 0.25;
+      drawPokobom(bx + r * 0.5, by + r * 0.45 - (hit ? r * 0.1 : 0), r * 0.18, t);
+      if (hit) star(bx + r * 0.5, by + r * 0.1, r * 0.12, '#ffe066');
+      ctx.restore();
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(190,140,255,.9)'; ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.stroke();
+      ell(bx - r * 0.35, by - r * 0.45, r * 0.25, r * 0.1, 'rgba(255,255,255,.35)', -0.6);
+    }
+  },
+  { // 2. かなり つよく なったな → しまへ しょうたい
+    lines: [
+      { who: 'まおう', t: 'フハハ…、かなり つよく なったな。' },
+      { who: 'まおう', t: 'よかろう！ おまえたちを わしの しまへ しょうたい して やろう！' },
+    ],
+    draw(w, h, t, idx) {
+      sky(w, h, '#2a1640', '#7a2f5a');
+      const s = h * 0.24;
+      for (let k = 0; k < 10; k++) { const a = k / 10 * TAU + t * 0.4; ctx.strokeStyle = 'rgba(190,140,255,.25)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(w / 2, h * 0.75); ctx.lineTo(w / 2 + Math.cos(a) * w, h * 0.75 + Math.sin(a) * w); ctx.stroke(); }
+      drawMaou(w / 2, h * 0.95, s, t);
+      if (idx >= 1) text('しょうたい じょう', w / 2, h * 0.14, Math.min(w, h) * 0.07, '#ffe066', 'center', '#4a0f2a');
+    }
+  },
+  { // 3. うらいちばに ひかりの みちが おりて くる
+    lines: [
+      { who: '{N}', t: 'あっ！ そらから ひかりの みちが おりて きた！' },
+      { who: 'まおうの こえ', t: 'この ひかりの みちを のぼって こい。わしは しまの まおうじょうで まって おるぞ！' },
+    ],
+    draw(w, h, t, idx, lt) {
+      drawMarketBg(w, h, t);
+      ctx.fillStyle = 'rgba(10,5,25,.45)'; ctx.fillRect(0, 0, w, h);
+      const iw = Math.min(w * 0.4, h * 0.6), ix = w * 0.72, iy = h * 0.12;
+      drawIsland(ix, iy, iw, t);
+      const p = ease(Math.min(1, t / 1.5)), gy = h * 0.82;
+      const g = ctx.createLinearGradient(0, iy, 0, gy);
+      g.addColorStop(0, 'rgba(255,240,160,.9)'); g.addColorStop(1, 'rgba(255,240,160,.25)');
+      ctx.fillStyle = g; ctx.beginPath();
+      ctx.moveTo(ix - iw * 0.08, iy + iw * 0.2); ctx.lineTo(ix + iw * 0.08, iy + iw * 0.2);
+      ctx.lineTo(lerp(ix + iw * 0.08, w * 0.6, p), lerp(iy, gy, p)); ctx.lineTo(lerp(ix - iw * 0.08, w * 0.45, p), lerp(iy, gy, p)); ctx.closePath(); ctx.fill();
+      for (let k = 0; k < 8; k++) { const q = (t * 0.5 + k / 8) % 1; star(lerp(w * 0.52, ix, q) + Math.sin(k) * 10, lerp(gy, iy + iw * 0.2, q), 5, 'rgba(255,255,220,.9)'); }
+      const s = Math.min(h * 0.13, w * 0.12);
+      drawHero(w * 0.25, h * 0.78, s, 'up');
+      drawRen(w * 0.35, h * 0.78, s, t, true);
+      if (idx === 0) text('！', w * 0.25, h * 0.78 - s * 2.4, s * 0.5, '#ffe066', 'center', '#4a2500');
+    }
+  },
+  { // 4. ひかりの みちを のぼる
+    lines: [
+      { who: 'レン', t: 'まおうの しまへ いける みちだ…！' },
+      { who: '{N}', t: 'いこう、レン！' },
+    ],
+    draw(w, h, t, idx, lt) {
+      sky(w, h, '#1e1633', '#4a3a7a');
+      for (let k = 0; k < 24; k++) circle((hash(k, 2) / 1000) * w, (hash(k, 7) / 1000) * h, 1.5, 'rgba(255,255,255,.7)');
+      for (const [x, y, r] of [[0.15, 0.75, 0.12], [0.8, 0.85, 0.15], [0.55, 0.95, 0.1]]) { circle(w * x, h * y, h * r, 'rgba(230,220,255,.2)'); circle(w * x + h * r, h * y, h * r * 0.8, 'rgba(230,220,255,.2)'); }
+      const iw = Math.min(w * 0.35, h * 0.5);
+      drawIsland(w * 0.82, h * 0.18, iw, t);
+      ctx.strokeStyle = 'rgba(255,240,160,.35)'; ctx.lineWidth = h * 0.12; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-w * 0.05, h * 1.05); ctx.lineTo(w * 0.8, h * 0.26); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,240,160,.85)'; ctx.lineWidth = h * 0.05;
+      ctx.beginPath(); ctx.moveTo(-w * 0.05, h * 1.05); ctx.lineTo(w * 0.8, h * 0.26); ctx.stroke();
+      const q = 0.25 + Math.min(1, t / 6) * 0.35, s = Math.min(h * 0.1, w * 0.09);
+      const at = k => [lerp(-w * 0.05, w * 0.8, k), lerp(h * 1.05, h * 0.26, k)];
+      const [hx, hy] = at(q), [rx, ry] = at(q - 0.07);
+      drawRen(rx, ry - h * 0.02, s, t, false);
+      drawHero(hx, hy - h * 0.02, s, 'right', t * 12, true);
+    }
+  },
+  { // 5. まおうの しま。おくに まおうじょう
+    lines: [
+      { t: 'まおうの しまに ついた！' },
+      { who: 'レン', t: 'みて！ いちばん おくに おしろが ある。あれが まおうじょうだ！' },
+      { who: 'レン', t: 'しまには まおうの てしたが いっぱい いるみたい…。' },
+    ],
+    draw(w, h, t) {
+      drawIslandLand(w, h, t, false);
+      const s = Math.min(h * 0.13, w * 0.12);
+      drawHero(w * 0.44, h * 0.8, s, 'up');
+      drawRen(w * 0.58, h * 0.8, s, t, true);
+    }
+  },
+  { // 6. てきを たおしながら まおうじょうへ すすむ ことに きめる
+    lines: [
+      { who: '{N}', t: 'しまの てきを たおしながら すすんで、まおうを たおしに いこう！' },
+      { who: 'レン', t: 'うん！ ふたりなら ぜったい だいじょうぶ！' },
+      { who: 'まおうの こえ', t: 'フハハハ！ まって おるぞ！' },
+    ],
+    draw(w, h, t, idx) {
+      drawIslandLand(w, h, t, true);
+      const s = Math.min(h * 0.13, w * 0.12);
+      drawHero(w * 0.42, h * 0.8, s * 1.1, 'up');
+      drawRen(w * 0.6, h * 0.8, s * 1.1, t, false);
+      if (idx >= 2) text('つづく…', w * 0.86, h * 0.1, Math.min(w, h) * 0.06, '#ffe066', 'center', '#4a0f2a');
+    }
+  },
+];
+// てつの けん と てつの よろいを ふたつとも つくったら、まおうから しょうたいが くる
+function inviteReady() { return !G.cleared.invite && gearOwned('iron_sword') && gearOwned('iron_armor'); }
+function playInvite() { Movie.play(CARDS4, () => { G.cleared.invite = true; Market.back = 'invite'; go(Market); }); }
+
 // ===== まおうの てしたと たたかう（ざこ 3びき → ボス） =====
 const Raid = {
   t: 0, inv: 0, noRun: true, caught: [], // noRun：ここでは にげられない
@@ -3336,7 +3497,8 @@ const CHAPTERS = [
   { id: 'town2', name: 'どうぐや と モンスター きょうしつ' },
   { id: 'home', name: 'じぶんと レンの いえ（あさ と よる）' },
   { id: 'raid', name: 'まおうの しゅうげき' },
-  { id: 'quests2', name: 'あたらしい クエスト と てつの そうび', isNew: true },
+  { id: 'quests2', name: 'あたらしい クエスト と てつの そうび' },
+  { id: 'invite', name: 'まおうの しまへ しょうたい（ムービー）', isNew: true },
 ];
 const NEWEST = CHAPTERS.find(c => c.isNew) || CHAPTERS[CHAPTERS.length - 1];
 function startAt(id) {
@@ -3347,6 +3509,7 @@ function startAt(id) {
   if (past('forge')) { G.lv = { weapon: 2, armor: 2 }; G.items = { iron: 0, vine: 0, gem: 0 }; G.nets.s = 3; }
   if (past('hunt')) { G.cleared.hunt = true; G.coins = HUNT_REWARD; G.nets.s = 1; addMonster('toruppy'); addMonster('yellowl'); }
   if (past('raid')) { G.cleared.raid = true; G.coins = 100; G.nets.s = 2; Market.seen.shop = true; Market.seen.home = true; addMonster('pokobom'); addMonster('gorogante'); }
+  if (past('quests2')) { G.cleared.saisyu = true; G.cleared.mori = true; G.cleared.iwayama = true; G.owned = { iron_sword: true, iron_armor: true }; G.equip = { weapon: 'iron_sword', armor: 'iron_armor' }; G.coins = 700; addMonster('mogudrill'); }
   recalcBonus();
   if (id === 'movie') Movie.play(CARDS, () => go(Field));
   else if (id === 'field') go(Field);
@@ -3360,6 +3523,7 @@ function startAt(id) {
   else if (id === 'home') { Market.seen.shop = true; go(Home); }
   else if (id === 'raid') { Market.seen.shop = true; Movie.play(CARDS3, () => Raid.start()); }
   else if (id === 'quests2') { Market.back = 'raid'; go(Market); }
+  else if (id === 'invite') playInvite();
   else if (id === 'town2') { go(Market); Talk.say([{ who: 'レン', t: 'どうぐやで とりあみが かえるように なったよ。「モンスター きょうしつ」では、つれていく なかまを えらべるよ！' }]); }
   else return false;
   return true;
@@ -3400,6 +3564,7 @@ const Save = {
     if (d.cp === 'movie') return 'さいしょの ムービー';
     if (d.cp === 'field') return 'おそわれた まち';
     if (d.cp === 'movie2') return 'うらいちば ムービー';
+    if (g.cleared.invite) return 'まおうの しまへ しょうたい された';
     if (g.cleared.iwayama) return 'モグドリルの クエスト クリア';
     if (g.cleared.mori) return 'ポコボムの クエスト クリア';
     if (g.cleared.raid) return 'まおうの しゅうげきを しのいだ';

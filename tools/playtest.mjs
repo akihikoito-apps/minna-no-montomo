@@ -321,7 +321,12 @@ await press('てつの けん'); await press('きょうか する'); await talkA
 if (await ev('G.bonus.atk') !== 4 || await ev('G.glv.iron_sword') !== 2) throw new Error('upgrade wrong');
 await press('かけだしの こんぼう'); await press('そうび する'); if (await ev('G.bonus.atk') !== 2) throw new Error('equip club wrong');
 await press('てつの けん'); await press('そうび する'); if (await ev('G.bonus.atk') !== 4) throw new Error('equip sword wrong');
-await press('もどる'); await press('うらいちばへ もどる'); await waitFor('scene===Market', 5000); await sleep(400); await talkAll();
+await press('もどる'); await press('うらいちばへ もどる');
+// てつの そうびが ふたつ そろったので、まおうの しょうたい ムービー（6ばめん）
+await waitFor('scene===Movie', 6000);
+for (let c = 0; c < 6; c++) { await waitFor('scene===Movie && Movie.tr<0 && Talk.active()'); await sleep(1300); await shot(`movie4-${c + 1}`); await talkAll(); if (c < 5) await sleep(950); }
+await waitFor('scene===Market', 6000); await sleep(400); await shot('invite-back'); await talkAll();
+if (!(await ev('G.cleared.invite'))) throw new Error('invite not set');
 await shop('quest', 'クエスト うけつけ'); await press('おわった（4）'); await sleep(200); await shot('quest-board-done4'); await press('とじる');
 const gearState = await ev('JSON.stringify({eq:G.equip,bonus:G.bonus,items:G.items,coins:G.coins})');
 // なんかいでも うけられる そざいあつめ：2こ とって とちゅうで かえる → そざいは もらえる
@@ -368,7 +373,7 @@ for (let i = 0; i < chapters; i++) {
   if (i > 0) { await reload(); await press('ばめんを えらぶ'); }
   await press(`${i + 1}. ${ch.name}`); await sleep(800);
   const sc = await ev('scene===Movie?"Movie":scene===Field?"Field":scene===Battle?"Battle":scene===Market?"Market":scene===Gather?"Gather":scene===Forge?"Forge":scene===Hunt?"Hunt":scene===Home?"Home":scene===Raid?"Raid":"?"');
-  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market', home: 'Home', raid: 'Movie', quests2: 'Market' }[ch.id];
+  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market', home: 'Home', raid: 'Movie', quests2: 'Market', invite: 'Movie' }[ch.id];
   if (sc !== want) throw new Error(`chapter ${ch.id} went to ${sc}`);
   if (['market', 'gather'].includes(ch.id) && !(await ev('G.gear'))) throw new Error('gear missing in ' + ch.id);
 }
@@ -384,7 +389,7 @@ if (!(await ev("hits.some(h=>h.label==='いいえ')"))) throw new Error('no over
 await press('いいえ'); await press('とじる');
 await reload(); await press('あたらしい ところから'); await sleep(800);
 const newest = await ev('NEWEST.id');
-if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market,home:Home,raid:Movie,quests2:Market}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
+if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market,home:Home,raid:Movie,quests2:Market,invite:Movie}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
 await shot('newest');
 console.log(JSON.stringify({ ok: true, gearState, name: await ev('G.name'), savedName, allyHp, gear, items, lv, party, shopState, teamKinds, minSpotDist: dist, chapters, newest, loaded, errors }));
 ws.close(); proc.kill();
