@@ -21,7 +21,7 @@ const ev = async expr => { const r = await send('Runtime.evaluate', { expression
 const tap = async (x, y) => { for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 }); await sleep(60); };
 let n = 0; const shot = async name => { const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(`${outDir}/${String(++n).padStart(2, '0')}-${name}.png`, Buffer.from(r.result.data, 'base64')); };
 // ボタンを ラベルで さがして おす
-const press = async label => { const h = await ev(`(()=>{const b=hits.find(h=>h.label===${JSON.stringify(label)});return b&&[b.x+b.w/2,b.y+b.h/2]})()`); if (!h) throw new Error('button not found: ' + label + ' / ' + await ev('JSON.stringify(hits.map(h=>h.label))')); await tap(h[0], h[1]); await sleep(150); };
+const press = async label => { let h; for (let i = 0; i < 15 && !h; i++) { h = await ev(`(()=>{const b=hits.find(h=>h.label===${JSON.stringify(label)});return b&&[b.x+b.w/2,b.y+b.h/2]})()`); if (!h) await sleep(100); } if (!h) throw new Error('button not found: ' + label + ' / ' + await ev('JSON.stringify(hits.map(h=>h.label))')); await tap(h[0], h[1]); await sleep(150); };
 const talkAll = async (max = 60) => { for (let i = 0; i < max && await ev('Talk.active()'); i++) { await tap(VW / 2, VH * 0.5); await sleep(40); await tap(VW / 2, VH * 0.5); await sleep(40); } };
 const shop = async (id, label) => { await ev(`Market.tx=Market.sx=Market.centerOn('${id}')`); await sleep(120); await press(label); };
 const waitFor = async (expr, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await ev(expr)) return; await sleep(100); } throw new Error('timeout: ' + expr); };
@@ -283,13 +283,21 @@ await waitFor('scene===Market', 6000); await sleep(400); await talkAll(); await 
 if (await ev('G.coins') !== coins0 + 300 || !(await ev('G.cleared.mori'))) throw new Error('mori reward wrong');
 await press('うらいちばに もどる'); await sleep(400);
 if (await ev('Market.hintTarget()') !== 'smith') throw new Error('smith hint missing: ' + await ev('Market.hintTarget()'));
-await shop('smith', 'かじや'); await waitFor('scene===Smithy', 5000); await sleep(500); await talkAll(); await sleep(200); await shot('smithy');
-await press('てつの けんを つくる'); await sleep(400); await shot('smithy-hammer'); await talkAll(); await sleep(200); await shot('smithy-sword');
+// かじや：あいさつ → つくる／きょうか を えらぶ → そうびを えらぶ
+await shop('smith', 'かじや'); await waitFor('scene===Smithy', 5000); await sleep(500); await shot('smithy-hello'); await talkAll(); await sleep(600); await shot('smithy-menu');
+await press('そうびを つくる'); await sleep(200);
+await press('てつの よろい'); await sleep(200); await shot('smithy-make-lack'); // そざいが たりない ことが かいて ある
+if (!(await ev("hits.some(h=>h.label==='そざいが たりない')"))) throw new Error('lack label missing');
+await press('そざいが たりない'); await talkAll();
+if (await ev('G.equip.armor')) throw new Error('armor made without materials');
+await press('てつの けん'); await sleep(200); await shot('smithy-make');
+await press('つくる'); await sleep(400); await shot('smithy-hammer'); await talkAll(); await sleep(200); await shot('smithy-sword');
 const sword = await ev('JSON.stringify({eq:G.equip,b:G.bonus})');
 if (!sword.includes('"weapon":"iron_sword"') || !sword.includes('"atk":3')) throw new Error('sword wrong: ' + sword);
-await press('てつの よろいを つくる'); await talkAll(); // そざいが たりない
-if (await ev('G.equip.armor')) throw new Error('armor made without materials');
-await press('うらいちばへ もどる'); await waitFor('scene===Market', 5000); await sleep(400); await talkAll();
+await press('もどる'); await press('そうびを きょうか する'); await sleep(200); await shot('smithy-up-list');
+await press('てつの けん'); await sleep(200); await shot('smithy-up-lack');
+if (!(await ev("hits.some(h=>h.label==='そざいが たりない')"))) throw new Error('up lack label missing');
+await press('もどる'); await press('うらいちばへ もどる'); await waitFor('scene===Market', 5000); await sleep(400); await talkAll();
 await shop('shop', 'どうぐや'); await press('300コイン'); await press('とじる'); await sleep(500);
 await shop('quest', 'クエスト うけつけ'); await sleep(200);
 await press('クエスト「いわやまの モグドリル」'); await sleep(200); await shot('quest-confirm-lv2'); await press('はい'); await talkAll();
@@ -304,12 +312,16 @@ await waitFor('scene===Market', 6000); await sleep(400); await talkAll(); await 
 if (!(await ev('G.cleared.iwayama')) || !(await ev("G.box.some(m=>m.kind==='mogudrill')"))) throw new Error('iwayama result wrong');
 await press('うらいちばに もどる'); await sleep(400);
 await shop('smith', 'かじや'); await waitFor('scene===Smithy', 5000); await sleep(500); await talkAll();
-await press('てつの よろいを つくる'); await talkAll(); await sleep(200); await shot('smithy-armor');
+await press('そうびを つくる'); await press('てつの よろい'); await press('つくる'); await talkAll(); await sleep(200); await shot('smithy-armor');
 const armor = await ev('JSON.stringify(G.bonus)');
 if (armor !== '{"hp":15,"atk":3,"def":3}') throw new Error('armor wrong: ' + armor);
-await press('てつの けんを はずす'); if (await ev('G.bonus.atk') !== 2) throw new Error('unequip wrong');
-await press('てつの けんを そうび');
-await press('うらいちばへ もどる'); await waitFor('scene===Market', 5000); await sleep(400); await talkAll();
+// きょうか：そざいを たして てつの けんを Lv2 に。かけだしの こんぼうに つけかえ → もどす
+await press('もどる'); await press('そうびを きょうか する'); await ev('G.items.iron+=2;G.items.gem+=1');
+await press('てつの けん'); await press('きょうか する'); await talkAll(); await sleep(200); await shot('smithy-upgraded');
+if (await ev('G.bonus.atk') !== 4 || await ev('G.glv.iron_sword') !== 2) throw new Error('upgrade wrong');
+await press('かけだしの こんぼう'); await press('そうび する'); if (await ev('G.bonus.atk') !== 2) throw new Error('equip club wrong');
+await press('てつの けん'); await press('そうび する'); if (await ev('G.bonus.atk') !== 4) throw new Error('equip sword wrong');
+await press('もどる'); await press('うらいちばへ もどる'); await waitFor('scene===Market', 5000); await sleep(400); await talkAll();
 await shop('quest', 'クエスト うけつけ'); await press('おわった（4）'); await sleep(200); await shot('quest-board-done4'); await press('とじる');
 const gearState = await ev('JSON.stringify({eq:G.equip,bonus:G.bonus,items:G.items,coins:G.coins})');
 // たたかいで こうたい

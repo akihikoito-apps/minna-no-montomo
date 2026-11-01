@@ -37,12 +37,12 @@ const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const hash = (i, j) => (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000;
 
 // ゲームの ばんごう（あげる ときは node tools/bump.mjs 0.9 で sw.js・version.json・index.html も いっしょに）
-const GAME_VERSION = '0.11';
+const GAME_VERSION = '0.12';
 
 const G = {
   name: 'ソラ', firstBattle: true, gear: false, bonus: { hp: 0, atk: 0, def: 0 }, quest: null,
   items: { iron: 0, vine: 0, gem: 0 }, lv: { weapon: 1, armor: 1 }, cleared: {},
-  equip: { weapon: null, armor: null }, owned: {}, // equip：いま つけている そうび（null＝かけだしの そうび）、owned：かじやで つくった そうび
+  equip: { weapon: null, armor: null }, owned: {}, glv: {}, // equip：いま つけている そうび（null＝かけだしの そうび）、owned：かじやで つくった そうび、glv：その きょうか Lv
   nets: { s: 1, m: 0, l: 0 }, coins: 0,
   shelf: { s: 0, m: 0, l: 0, iron: 0, vine: 0, gem: 0 }, dayClock: 300, // shelf：いえの たな、dayClock：ねてからの びょう（300＝よる）
   box: [{ uid: 1, kind: 'pomuru' }], team: [1], uid: 1, // box：もっている モンスター、team：つれていく なかま（3にんまで）
@@ -2190,109 +2190,171 @@ const UPGRADES = {
 };
 const MAT_SHORT = { iron: 'てつ', vine: 'つる', gem: 'きらきら いし' };
 // そうびの レベルから、なかま みんなに つく ステータスを けいさんする
-// かじやで つくった そうびを つけて いれば、そちらの つよさに なる
+// そうびの つよさ（なかま みんなに つく）。つけて いない ぶき・ぼうぐは かけだしの そうび
 function recalcBonus() {
   if (!G.gear) { G.bonus = { hp: 0, atk: 0, def: 0 }; return; }
-  const eq = G.equip || {}, w = GEAR_ITEMS[eq.weapon], a = GEAR_ITEMS[eq.armor];
-  G.bonus = {
-    hp: a ? a.hp : GEAR_BONUS.hp + (G.lv.armor - 1) * 5,
-    atk: w ? w.atk : GEAR_BONUS.atk + (G.lv.weapon - 1),
-    def: a ? a.def : GEAR_BONUS.def + (G.lv.armor - 1),
-  };
+  const eq = G.equip || {}, w = gearStat(GEAR_ITEMS[eq.weapon] ? eq.weapon : 'club'), a = gearStat(GEAR_ITEMS[eq.armor] ? eq.armor : 'start_armor');
+  G.bonus = { hp: a.hp, atk: w.atk, def: a.def };
 }
-// ===== かじやで あたらしい そうびを つくる =====
+// ===== かじや：そうびを つくる・きょうか する =====
+// base は Lv1 の つよさ、up は きょうか 1かい ぶん。かけだしの そうび（club・start_armor）の Lv は G.lv、つくった そうびの Lv は G.glv
 // かけだしの そうび（きょうか Lv2）は こうげき +2・ぼうぎょ +2・HP +10。てつの そうびは それより すこし つよい
 const GEAR_ITEMS = {
-  iron_sword: { name: 'てつの けん', slot: 'weapon', kind: 'ぶき', need: { iron: 3, gem: 1 }, atk: 3, gainText: 'こうげき +3' },
-  iron_armor: { name: 'てつの よろい', slot: 'armor', kind: 'ぼうぐ', need: { iron: 4, vine: 2 }, def: 3, hp: 15, gainText: 'ぼうぎょ +3　HP +15' },
+  club: { name: 'かけだしの こんぼう', slot: 'weapon', start: true, base: { atk: 1 }, up: { atk: 1 }, upNeed: { iron: 2, gem: 1 } },
+  start_armor: { name: 'かけだしの よろい', slot: 'armor', start: true, base: { def: 1, hp: 5 }, up: { def: 1, hp: 5 }, upNeed: { vine: 3, iron: 1, gem: 1 } },
+  iron_sword: { name: 'てつの けん', slot: 'weapon', need: { iron: 3, gem: 1 }, base: { atk: 3 }, up: { atk: 1 }, upNeed: { iron: 2, gem: 1 } },
+  iron_armor: { name: 'てつの よろい', slot: 'armor', need: { iron: 4, vine: 2 }, base: { def: 3, hp: 15 }, up: { def: 1, hp: 5 }, upNeed: { iron: 3, vine: 2 } },
 };
-function canCraft() { return Object.entries(GEAR_ITEMS).some(([id, g]) => !(G.owned || {})[id] && Object.entries(g.need).every(([k, n]) => G.items[k] >= n)); }
-function nowGearText(slot) {
-  const g = GEAR_ITEMS[(G.equip || {})[slot]];
-  if (g) return `${g.name}（${g.gainText}）`;
-  return slot === 'weapon' ? `かけだしの こんぼう Lv${G.lv.weapon}（こうげき +${GEAR_BONUS.atk + G.lv.weapon - 1}）`
-    : `かけだしの よろい Lv${G.lv.armor}（ぼうぎょ +${GEAR_BONUS.def + G.lv.armor - 1}　HP +${GEAR_BONUS.hp + (G.lv.armor - 1) * 5}）`;
+const GEAR_MAX = 3; // きょうかは Lv3 まで
+const SLOT_NAME = { weapon: 'ぶき', armor: 'ぼうぐ' };
+function gearLv(id) { const g = GEAR_ITEMS[id]; return g.start ? G.lv[g.slot] : ((G.glv || {})[id] || 1); }
+function gearStat(id, lv = gearLv(id)) {
+  const g = GEAR_ITEMS[id], out = { atk: 0, def: 0, hp: 0 };
+  for (const k in out) out[k] = (g.base[k] || 0) + (g.up[k] || 0) * (lv - 1);
+  return out;
 }
+function statText(s) { return [s.atk && `こうげき +${s.atk}`, s.def && `ぼうぎょ +${s.def}`, s.hp && `HP +${s.hp}`].filter(Boolean).join('　'); }
+function gearOwned(id) { return GEAR_ITEMS[id].start || !!(G.owned || {})[id]; }
+function gearOn(id) { const g = GEAR_ITEMS[id], e = (G.equip || {})[g.slot]; return g.start ? !GEAR_ITEMS[e] : e === id; }
+function haveMats(need) { return Object.entries(need).every(([k, n]) => G.items[k] >= n); }
+function lackText(need) { return Object.entries(need).filter(([k, n]) => G.items[k] < n).map(([k, n]) => `${MAT_SHORT[k]}が あと ${n - G.items[k]}こ`).join('、'); }
+function canCraft() { return Object.entries(GEAR_ITEMS).some(([id, g]) => g.need && !gearOwned(id) && haveMats(g.need)); }
 const Smithy = {
-  t: 0, ham: 0, msg: null,
+  t: 0, ham: 0, msg: null, mode: 'menu', sel: null,
   enter() {
-    this.t = 0; this.ham = 0; this.msg = null;
+    this.t = 0; this.ham = 0; this.msg = null; this.mode = 'hello'; this.sel = null;
     if (!G.equip) G.equip = { weapon: null, armor: null };
     if (!G.owned) G.owned = {};
-    const lines = [{ who: 'かじや', t: 'おう、きたな！ そざいが あれば、あたらしい そうびを つくって やるぞ。' }];
+    if (!G.glv) G.glv = {};
+    const lines = [
+      { who: 'かじや', t: 'いらっしゃい！ {N}、よく きたな！' },
+      { who: 'かじや', t: 'そざいを もって くれば、あたらしい そうびを つくったり、きょうか したり できるぞ。きょうは どうする？' },
+    ];
     if (!Market.seen.smithy) {
       Market.seen.smithy = true;
-      lines.push({ who: 'レン', t: 'そうびを つくるには そざいが いるんだ。そざいは クエストの ほうしゅうでも もらえるよ！' });
+      lines.push({ who: 'レン', t: 'そざいは クエストの ほうしゅうでも もらえるよ。つくりたい そうびを えらんでみよう！' });
     }
-    Talk.say(lines);
+    Talk.say(lines, () => { this.mode = 'menu'; });
   },
-  have(need) { return Object.entries(need).every(([k, n]) => G.items[k] >= n); },
+  // mode：hello（あいさつ）、menu（つくる か きょうか か えらぶ）、make（つくる）、up（きょうか）
+  open(mode) {
+    this.mode = mode; this.msg = null;
+    this.sel = this.list()[0] || null;
+  },
+  list() {
+    const ids = Object.keys(GEAR_ITEMS);
+    return this.mode === 'make' ? ids.filter(id => GEAR_ITEMS[id].need) : ids.filter(gearOwned);
+  },
   make(id) {
     const g = GEAR_ITEMS[id];
-    if (!this.have(g.need)) return Talk.say([{ who: 'かじや', t: 'そざいが たりないな…。クエストで あつめて きな！' }]);
+    if (!haveMats(g.need)) return Talk.say([{ who: 'かじや', t: `そざいが たりないな…。${lackText(g.need)} ひつようだ。` }]);
     for (const [m, n] of Object.entries(g.need)) G.items[m] -= n;
     G.owned[id] = true; G.equip[g.slot] = id; recalcBonus(); this.ham = 1.6;
     Talk.say([
       { who: 'かじや', t: 'まかせとけ！ カン！ カン！ カン！' },
-      { t: `${g.name}が できた！ さっそく そうび した！（${g.gainText}）` },
-      { who: 'レン', t: 'かっこいい！ なかまの モンスター みんなが また つよく なったね！' },
+      { t: `${g.name}が できた！ さっそく そうび した！（${statText(gearStat(id))}）` },
+    ], () => Save.write('market'));
+  },
+  upgrade(id) {
+    const g = GEAR_ITEMS[id], lv = gearLv(id);
+    if (lv >= GEAR_MAX) return;
+    if (!haveMats(g.upNeed)) return Talk.say([{ who: 'かじや', t: `そざいが たりないな…。${lackText(g.upNeed)} ひつようだ。` }]);
+    for (const [m, n] of Object.entries(g.upNeed)) G.items[m] -= n;
+    if (g.start) G.lv[g.slot]++; else G.glv[id] = lv + 1;
+    recalcBonus(); this.ham = 1.6;
+    Talk.say([
+      { who: 'かじや', t: 'よし、きたえて やろう！ カン！ カン！ カン！' },
+      { t: `${g.name}が Lv${lv + 1}に なった！（${statText(gearStat(id))}）` },
     ], () => Save.write('market'));
   },
   wear(id) {
     const g = GEAR_ITEMS[id];
-    G.equip[g.slot] = G.equip[g.slot] === id ? null : id; recalcBonus();
-    this.msg = { t: G.equip[g.slot] === id ? `${g.name}を そうび した` : `${g.name}を はずした`, time: 2 };
+    G.equip[g.slot] = g.start ? null : id; recalcBonus();
+    this.msg = { t: `${g.name}を そうび した`, time: 2 };
   },
   update(dt) {
     this.t += dt; this.ham = Math.max(0, this.ham - dt);
+    this.quiet = Talk.active() ? 0.4 : Math.max(0, (this.quiet || 0) - dt); // セリフを おくる れんだで ボタンを おさないように
     if (this.msg && (this.msg.time -= dt) <= 0) this.msg = null;
-  },
-  card(id, x, y, w, h) {
-    const g = GEAR_ITEMS[id], own = G.owned[id], on = G.equip[g.slot] === id, idle = !Talk.active();
-    rr(x, y, w, h, 14); ctx.fillStyle = on ? '#e7f7e0' : 'rgba(255,252,242,.95)'; ctx.fill();
-    ctx.lineWidth = on ? 5 : 3; ctx.strokeStyle = on ? '#2f9e44' : '#6b4a2b'; ctx.stroke();
-    const fp = clamp(h * 0.11, 12, 18);
-    text(g.kind, x + w / 2, y + fp * 1.0, fp * 0.85, '#8a4b0f');
-    text(g.name, x + w / 2, y + fp * 2.2, fitPx(g.name, fp * 1.1, w - 16), '#3a2410');
-    text(g.gainText, x + w / 2, y + fp * 3.4, fitPx(g.gainText, fp * 0.85, w - 16), '#c0392b');
-    if (!own) {
-      const ent = Object.entries(g.need), cw = (w - 16) / ent.length;
-      ent.forEach(([m, n], i) => {
-        const cx = x + 8 + cw * (i + 0.5), cy = y + fp * 5.0;
-        drawMaterial(m, cx, cy, fp * 1.3);
-        text(`${G.items[m]}/${n}`, cx, cy + fp * 1.3, fp * 0.8, G.items[m] >= n ? '#2f6b2a' : '#c0392b');
-      });
-    } else text(on ? 'そうび ちゅう' : 'もっている', x + w / 2, y + fp * 5.3, fp, on ? '#2f9e44' : '#6a4a2a');
-    const bh = clamp(h * 0.22, 32, 46), by = y + h - bh - 8;
-    if (!idle) return;
-    if (!own) button(x + 10, by, w - 20, bh, `${g.name}を つくる`, () => this.make(id), { blink: this.have(g.need), off: !this.have(g.need), col: '#ff7a59', line: '#8a2b12', fg: '#fff' });
-    else button(x + 10, by, w - 20, bh, on ? `${g.name}を はずす` : `${g.name}を そうび`, () => this.wear(id), { col: on ? '#c9d6e8' : '#7fd36b', line: on ? '#4a5a72' : '#2f6b2a' });
   },
   draw() {
     CARDS2[4].draw(W, H, this.t, this.ham > 0 ? 1 : 0);
-    const m = 12, cw = Math.min(280, (W - m * 3) / 2), ch = clamp(H * 0.42, 170, 230);
-    const x1 = W / 2 - cw - m / 2, x2 = W / 2 + m / 2, y1 = 52;
-    const head = 'かじや：そうびを つくる';
-    rr(W / 2 - 150, 8, 300, 36, 14); ctx.fillStyle = 'rgba(60,30,10,.8)'; ctx.fill();
-    text(head, W / 2, 26, fitPx(head, 20, 280), '#ffe066');
-    this.card('iron_sword', x1, y1, cw, ch);
-    this.card('iron_armor', x2, y1, cw, ch);
-    // いまの そうびと もっている そざい
-    const info = [`ぶき：${nowGearText('weapon')}`, `ぼうぐ：${nowGearText('armor')}`, `そざい：てつ ${G.items.iron}　つる ${G.items.vine}　きらきら いし ${G.items.gem}`];
-    const iy = y1 + ch + 10, ip = clamp(H * 0.035, 12, 16), iw = Math.min(W - 24, cw * 2 + m);
-    rr(W / 2 - iw / 2, iy, iw, ip * 4.6, 12); ctx.fillStyle = 'rgba(255,252,242,.9)'; ctx.fill();
-    info.forEach((s, i) => text(s, W / 2, iy + ip * (1.0 + i * 1.3), fitPx(s, ip, iw - 20), '#3a2410'));
-    if (this.msg) {
-      const tp = fitPx(this.msg.t, 16, W - 60);
-      rr(W / 2 - 160, iy - 44, 320, 34, 12); ctx.fillStyle = '#1f9e8f'; ctx.fill();
-      text(this.msg.t, W / 2, iy - 27, tp, '#fff');
-    }
-    if (!Talk.active()) {
-      const bw = Math.min(260, W - 40), bh = 48;
-      button(W - bw - 16, H - bh - 12, bw, bh, 'うらいちばへ もどる', () => Fade.to(() => { Market.focus = 'smith'; go(Market); }), { col: '#ffe08a' });
-    }
+    const idle = !Talk.active() && !this.quiet;
+    if (this.mode === 'menu' && idle) this.drawMenu();
+    else if (this.mode === 'make' || this.mode === 'up') this.drawList(idle);
     if (Talk.active()) { const [bx, by, bw, bh] = talkBox(); Talk.draw(bx, by, bw, bh); }
-  }
+  },
+  drawMenu() {
+    const pw = Math.min(380, W - 40), bh = clamp(H * 0.15, 46, 64), gap = 12, ph = 76 + bh * 3 + gap * 2;
+    const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
+    rr(px, py, pw, ph, 18); ctx.fillStyle = 'rgba(255,248,232,.96)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = '#6b4a2b'; ctx.stroke();
+    text('かじや', px + pw / 2, py + 30, 24, '#8a4b0f');
+    const bx = px + 20, bw = pw - 40;
+    button(bx, py + 56, bw, bh, 'そうびを つくる', () => this.open('make'), { col: '#ff7a59', line: '#8a2b12', fg: '#fff', blink: canCraft() });
+    button(bx, py + 56 + bh + gap, bw, bh, 'そうびを きょうか する', () => this.open('up'), { col: '#ffb347' });
+    button(bx, py + 56 + (bh + gap) * 2, bw, bh, 'うらいちばへ もどる', () => Fade.to(() => { Market.focus = 'smith'; go(Market); }), { col: '#c9d6e8', line: '#4a5a72' });
+  },
+  // ひだりに そうびの いちらん、みぎに えらんだ そうびの くわしい ようす
+  drawList(idle) {
+    const px = 12, py = 12, pw = W - 24, ph = H - 24;
+    rr(px, py, pw, ph, 18); ctx.fillStyle = 'rgba(255,248,232,.96)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = '#6b4a2b'; ctx.stroke();
+    const make = this.mode === 'make', title = make ? 'そうびを つくる' : 'そうびを きょうか する';
+    rr(px, py, pw, 46, 18); ctx.fillStyle = make ? '#ff7a59' : '#f08c00'; ctx.fill();
+    text(title, px + pw / 2, py + 24, fitPx(title, 22, pw - 40), '#fff');
+    const mats = `もっている そざい：てつ ${G.items.iron}　つる ${G.items.vine}　きらきら いし ${G.items.gem}`;
+    text(mats, px + pw / 2, py + 62, fitPx(mats, 15, pw - 40), '#6a4a2a');
+    const lw = pw * 0.42, lx = px + 14, ly = py + 80, rows = this.list(), rh = Math.min(56, (ph - 156) / Math.max(4, rows.length) - 6);
+    rows.forEach((id, i) => {
+      const g = GEAR_ITEMS[id], y = ly + i * (rh + 6), on = this.sel === id;
+      const tag = make ? (gearOwned(id) ? 'もっている' : '') : `Lv${gearLv(id)}${gearOn(id) ? '・そうびちゅう' : ''}`;
+      const sub = SLOT_NAME[g.slot] + (tag ? '　' + tag : '');
+      if (idle) button(lx, y, lw, rh, g.name, () => { this.sel = id; this.msg = null; }, { col: on ? '#fff3c4' : '#fff', line: on ? '#ffb347' : '#d9c3a0', sub, px: 17 });
+      else { rr(lx, y, lw, rh, 12); ctx.fillStyle = on ? '#fff3c4' : '#fff'; ctx.fill(); text(g.name, lx + lw / 2, y + rh * 0.4, fitPx(g.name, 17, lw - 10), '#4a2500'); }
+    });
+    if (idle) button(lx, py + ph - 58, lw, 46, 'もどる', () => { this.mode = 'menu'; }, { col: '#c9d6e8', line: '#4a5a72' });
+    if (this.sel) this.drawDetail(this.sel, lx + lw + 14, ly, pw - lw - 42, ph - 80 - 12, idle);
+    if (this.msg) {
+      const tp = fitPx(this.msg.t, 16, 280);
+      rr(px + pw / 2 - 150, py + 50, 300, 28, 12); ctx.fillStyle = '#1f9e8f'; ctx.fill();
+      text(this.msg.t, px + pw / 2, py + 64, tp, '#fff');
+    }
+  },
+  drawDetail(id, x, y, w, h, idle) {
+    const g = GEAR_ITEMS[id], make = this.mode === 'make', lv = gearLv(id), own = gearOwned(id);
+    rr(x, y, w, h, 14); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#d9c3a0'; ctx.stroke();
+    const fp = clamp(h * 0.065, 13, 20), cx = x + w / 2;
+    text(SLOT_NAME[g.slot], cx, y + fp * 1.0, fp * 0.8, '#8a4b0f');
+    const nm = make ? g.name : `${g.name} Lv${lv}`;
+    text(nm, cx, y + fp * 2.1, fitPx(nm, fp * 1.15, w - 20), '#3a2410');
+    // つよさ（きょうかは いま → つぎ）
+    let st;
+    if (make) st = statText(gearStat(id, 1));
+    else if (lv >= GEAR_MAX) st = `${statText(gearStat(id))}（さいだい）`;
+    else st = `${statText(gearStat(id))} → ${statText(gearStat(id, lv + 1))}`;
+    text(st, cx, y + fp * 3.3, fitPx(st, fp * 0.9, w - 20), '#c0392b');
+    const need = make ? g.need : g.upNeed, done = make ? own : lv >= GEAR_MAX;
+    const bh = fp * 2.3, by = y + h - bh - 10;
+    const wearY = make ? by : by - bh - 8; // きょうか では「そうび する」を きょうかの うえに
+    if (!done) {
+      // ひつような そざい（たりない ものは あかで）
+      const ent = Object.entries(need), cw = (w - 20) / ent.length;
+      text('ひつような そざい', cx, y + fp * 4.6, fp * 0.8, '#6a4a2a');
+      ent.forEach(([m, n], i) => {
+        const mx = x + 10 + cw * (i + 0.5), my = y + fp * 6.0, s = `${MAT_SHORT[m]} ${G.items[m]}/${n}`;
+        drawMaterial(m, mx, my, fp * 1.1);
+        text(s, mx, my + fp * 1.3, fitPx(s, fp * 0.8, cw - 6), G.items[m] >= n ? '#2f6b2a' : '#c0392b');
+      });
+      const ok = haveMats(need);
+      if (!ok) { const lt = `${lackText(need)} たりない`; text(lt, cx, y + fp * 8.7, fitPx(lt, fp * 0.8, w - 20), '#c0392b'); }
+      if (idle) button(x + 12, by, w - 24, bh, ok ? (make ? 'つくる' : 'きょうか する') : 'そざいが たりない', () => make ? this.make(id) : this.upgrade(id),
+        { col: '#ff7a59', line: '#8a2b12', fg: '#fff', off: !ok, blink: ok });
+    } else text(make ? 'もう もっている そうび' : 'これいじょう きょうか できない', cx, y + fp * 5.2, fitPx('これいじょう きょうか できない', fp * 0.9, w - 20), '#2f6b2a');
+    // もっていれば、そうびの つけかえ
+    if (own && (!make || done)) {
+      if (gearOn(id)) text('そうび ちゅう', cx, wearY + bh / 2, fp, '#2f9e44');
+      else if (idle) button(x + 12, wearY, w - 24, bh, 'そうび する', () => this.wear(id), { col: '#7fd36b', line: '#2f6b2a' });
+    }
+  },
 };
 const Forge = {
   enter() {
