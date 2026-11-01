@@ -10,7 +10,7 @@
      （この ファイルの なかみが かわらないと ブラウザが こうしんに きづきません）
    ========================================================================== */
 
-const APP_VERSION = '0.12';
+const APP_VERSION = '0.13';
 const CACHE_NAME = 'montomo-' + APP_VERSION;
 
 const APP_SHELL = [

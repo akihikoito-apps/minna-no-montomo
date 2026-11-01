@@ -37,7 +37,7 @@ const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const hash = (i, j) => (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000;
 
 // ゲームの ばんごう（あげる ときは node tools/bump.mjs 0.9 で sw.js・version.json・index.html も いっしょに）
-const GAME_VERSION = '0.12';
+const GAME_VERSION = '0.13';
 
 const G = {
   name: 'ソラ', firstBattle: true, gear: false, bonus: { hp: 0, atk: 0, def: 0 }, quest: null,
@@ -1847,9 +1847,11 @@ const Clear = {
 
 // ===== うらいちば（クエストを うける ばしょ） =====
 // lv：クエストレベル（おおきい ほど むずかしい）。とくべつクエストは lv なしで「とくべつ」と でる
+// repeat：なんかいでも うける クエスト（「おわった」に うつらない）。おわった クエストも、ほうしゅう なしで もういちど あそべる
 const QUESTS = [
   { id: 'sozai', name: 'そざいあつめ', special: true, info: 'レンと いっしょに そざいを あつめよう', show: () => true },
   { id: 'hunt', name: 'トルピーを さがせ', lv: 1, info: 'そうげんで あばれる トルピーを たおすか つかまえよう', show: () => G.lv.weapon > 1 },
+  { id: 'saisyu', name: 'もりの そざいあつめ', lv: 1, repeat: true, info: 'しずかな もりで そざいを さがそう（なんかいでも うけられる）', show: () => !!G.cleared.sozai },
   { id: 'mori', name: 'もりの ポコボムを おいはらえ', lv: 1, info: 'もりに のこった ポコボムを 3びき たおすか つかまえよう', show: () => !!G.cleared.raid },
   { id: 'iwayama', name: 'いわやまの モグドリル', lv: 2, info: 'いわやまの おくに いる モグドリルを たおすか つかまえよう', show: () => !!G.cleared.raid },
 ];
@@ -1894,6 +1896,18 @@ const Market = {
         { who: 'レン', t: 'まおう、また くるかも しれない。もっと つよく ならなきゃ！' },
         ...NEWQ_LINES,
       ], () => { this.panel = 'done3'; });
+    } else if (back === 'replay') {
+      Talk.say([
+        { who: 'うけつけ', t: 'おかえりなさい！ クエスト クリア です！' },
+        { who: 'うけつけ', t: '2かいめ なので ほうしゅうは ありませんが、また いつでも どうぞ！' },
+      ]);
+    } else if (back === 'gather') {
+      const n = Gather.got(), all = n === Gather.spots.length;
+      Talk.say([
+        { who: 'うけつけ', t: 'おかえりなさい！ そざいあつめ、おつかれさまでした！' },
+        { t: n ? `そざいを ${n}こ もって かえった！${all ? '（ぜんぶ みつけた！）' : ''}` : 'こんどは そざいが みつからなかった…。' },
+        ...(canCraft() ? [{ who: 'レン', t: 'そざいが そろったね！ かじやで あたらしい そうびを つくって もらおう！' }] : []),
+      ]);
     } else if (back && QFIELDS[back]) {
       const qf = QFIELDS[back], rw = qf.reward;
       const got = Object.entries(rw.items).map(([k, n]) => `${MAT_SHORT[k]} ×${n}`).join('、');
@@ -1985,6 +1999,7 @@ const Market = {
     text(ct, W - 22, 28, 18, '#fff', 'right');
     const L = marketLayout();
     if (!Talk.active() && !this.panel && !this.quiet && !Fade.dir) {
+      button(W - 124, 52, 112, 40, 'メニュー', () => { this.panel = 'menu'; }, { col: 'rgba(255,255,255,.85)', line: '#4a5a72', px: 16 });
       for (const s0 of SHOPS) hits.push({ ...r[s0.id], label: sub(s0.sign), cb: () => this.open(s0.id) });
       if (L.maxScroll > 0) { // よこの やじるし
         if (this.tx > 1) button(6, H * 0.45, 40, 56, '◀', () => { this.tx -= L.SW + L.gap; }, { col: 'rgba(255,255,255,.8)' });
@@ -2002,9 +2017,9 @@ const Market = {
   },
   drawPanel() {
     ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 0, W, H);
-    const kind = this.panel === 'shop' ? 'shop' : this.panel === 'school' ? 'school' : 'quest';
-    const title = { shop: 'どうぐや', school: 'モンスター きょうしつ', quest: 'クエスト うけつけ' }[kind];
-    const col = { shop: '#3f7cac', school: '#2f9e44', quest: '#e07a5f' }[kind];
+    const kind = ['shop', 'school', 'menu'].includes(this.panel) ? this.panel : 'quest';
+    const title = { shop: 'どうぐや', school: 'モンスター きょうしつ', quest: 'クエスト うけつけ', menu: 'メニュー' }[kind];
+    const col = { shop: '#3f7cac', school: '#2f9e44', quest: '#e07a5f', menu: '#4a5a72' }[kind];
     const full = this.panel === 'board'; // クエストの いちらんは がめん いっぱいに ひろげる
     const pw = full ? W - 24 : Math.min(480, W - 24), ph = full ? H - 24 : Math.min(kind === 'school' ? 520 : 400, H - 40), px = (W - pw) / 2, py = (H - ph) / 2;
     rr(px, py, pw, ph, 18); ctx.fillStyle = '#fff8e8'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = '#6b4a2b'; ctx.stroke();
@@ -2019,6 +2034,7 @@ const Market = {
       const lvs = q.special ? 'とくべつクエスト' : `クエストレベル ${q.lv}（${QLV_WORD[q.lv] || ''}）`;
       text(lvs, px + pw / 2, py + ph * 0.26, fitPx(lvs, 20, bw), q.special ? '#e63946' : QLV_COL[q.lv] || '#343a40');
       text(msg, px + pw / 2, py + ph * 0.42, fitPx(msg, 22, bw), '#4a2500');
+      if (questDone(q)) { const r = 'もう クリアした クエスト。ほうしゅうは ないけど、もういちど あそべるよ'; text(r, px + pw / 2, py + ph * 0.55, fitPx(r, 16, bw), '#c0392b'); }
       button(bx, py + ph - 90, half, 64, 'はい', () => this.accept(), { col: '#7fd36b', line: '#2f6b2a', px: 24 });
       button(bx + half + 16, py + ph - 90, half, 64, 'いいえ', () => { this.panel = 'board'; }, { col: '#c9d6e8', line: '#4a5a72', px: 24 });
     } else if (this.panel === 'done') {
@@ -2060,6 +2076,13 @@ const Market = {
       text(b, px + pw / 2, py + ph * 0.61, fitPx(b, 18, bw), '#4a2500');
       button(bx, py + ph - 86, half, 60, 'うらいちばに もどる', () => { this.panel = null; }, { col: '#ffe08a' });
       button(bx + half + 16, py + ph - 86, half, 60, 'さいしょから', () => { location.hash = ''; location.reload(); }, { col: '#c9d6e8', line: '#4a5a72' });
+    } else if (this.panel === 'menu') { // タイトルの メニューに もどる（セーブ してから）
+      const a = 'メニューの がめんに もどる？';
+      text(a, px + pw / 2, py + ph * 0.32, fitPx(a, 22, bw), '#4a2500');
+      const b = Save.slot ? `セーブ${Save.slot}に セーブ して もどるよ` : '（ばめんを えらんで あそんで いるので セーブ しないよ）';
+      text(b, px + pw / 2, py + ph * 0.46, fitPx(b, 16, bw), '#2f6b2a');
+      button(bx, py + ph - 90, half, 64, 'はい', () => { Save.write('market', true); location.hash = ''; location.reload(); }, { col: '#7fd36b', line: '#2f6b2a', px: 24 });
+      button(bx + half + 16, py + ph - 90, half, 64, 'いいえ', () => { this.panel = null; }, { col: '#c9d6e8', line: '#4a5a72', px: 24 });
     } else if (this.panel === 'shop') this.drawShop(px, py, pw, ph, close);
     else if (this.panel === 'school') this.drawSchool(px, py, pw, ph, close);
     if (this.msg) {
@@ -2071,7 +2094,7 @@ const Market = {
   // クエスト いちらん：したの ボタンで「おわっていない」と「おわった」を きりかえる。おおくて はいらない ときは ページを めくる
   drawBoard(px, py, pw, ph) {
     const tab = this.tab || 'todo';
-    const list = QUESTS.filter(q => q.show() && !!G.cleared[q.id] === (tab === 'done'));
+    const list = QUESTS.filter(q => q.show() && questDone(q) === (tab === 'done'));
     const head = tab === 'done' ? 'おわった クエスト' : 'どの クエストを うける？';
     text(head, px + pw / 2, py + 76, fitPx(head, 18, pw - 40), '#4a2500');
     const top = py + 104, bottom = py + ph - 76;
@@ -2081,9 +2104,9 @@ const Market = {
     this.page = clamp(this.page || 0, 0, pages - 1);
     list.slice(this.page * per, this.page * per + per).forEach((q, i) => {
       const x = px + 20 + (i % cols) * (cw + gap), y = top + Math.floor(i / cols) * (chh + 16);
-      const done = !!G.cleared[q.id];
-      button(x, y, cw, chh, questTitle(q), () => done ? Talk.say([{ who: 'うけつけ', t: 'その クエストは もう クリアずみですよ！' }]) : (this.pick = q, this.panel = 'confirm'),
-        { col: done ? '#e9e2d4' : '#ffe08a', sub: done ? '✓ クリアずみ' : q.info, px: 20, blink: !done });
+      const done = questDone(q);
+      button(x, y, cw, chh, questTitle(q), () => { this.pick = q; this.panel = 'confirm'; },
+        { col: done ? '#e9e2d4' : '#ffe08a', sub: done ? '✓ クリアずみ（もういちど あそべるよ）' : q.info, px: 20, blink: !done });
       questRibbon(q, x, y);
     });
     if (!list.length) {
@@ -2098,7 +2121,7 @@ const Market = {
     }
     // した：きりかえ ボタン と とじる
     const by = py + ph - 64, bh = 50, cbw = Math.min(130, pw * 0.2), tw = Math.min(220, (pw - 60 - cbw) / 2);
-    const nTodo = QUESTS.filter(q => q.show() && !G.cleared[q.id]).length, nDone = QUESTS.filter(q => q.show() && G.cleared[q.id]).length;
+    const nTodo = QUESTS.filter(q => q.show() && !questDone(q)).length, nDone = QUESTS.filter(q => q.show() && questDone(q)).length;
     const sw = (t2) => () => { this.tab = t2; this.page = 0; };
     button(px + 20, by, tw, bh, `おわっていない（${nTodo}）`, sw('todo'), { col: tab === 'todo' ? '#ffb347' : '#f1ebe0', line: tab === 'todo' ? '#a0680a' : '#b8a888', px: 17 });
     button(px + 32 + tw, by, tw, bh, `おわった（${nDone}）`, sw('done'), { col: tab === 'done' ? '#9fd4a0' : '#f1ebe0', line: tab === 'done' ? '#2f6b2a' : '#b8a888', px: 17 });
@@ -2165,22 +2188,26 @@ const Market = {
     }
   },
   accept() {
-    G.quest = this.pick.id; this.panel = null;
-    const qf = QFIELDS[this.pick.id];
-    if (qf) return Talk.say([{ who: 'うけつけ', t: `${questTitle(this.pick)}を うけつけました！` }, ...qf.accept], () => Fade.to(() => QuestField.start(this.pick.id)));
-    if (this.pick.id === 'hunt') return Talk.say([
-      { who: 'うけつけ', t: `${questTitle(this.pick)}を うけつけました！` },
+    const q = this.pick, again = questDone(q);
+    G.quest = q.id; this.panel = null;
+    const hi = { who: 'うけつけ', t: again ? `${questTitle(q)}を もういちど ですね！ こんどは ほうしゅうは ありませんよ。` : `${questTitle(q)}を うけつけました！` };
+    const qf = QFIELDS[q.id];
+    if (qf) return Talk.say([hi, ...qf.accept], () => Fade.to(() => QuestField.start(q.id, again)));
+    if (q.id === 'hunt') return Talk.say([
+      hi,
       { who: 'うけつけ', t: 'そうげんで トルピーが あばれて いるそうです。イエロールも たくさん いるので きを つけて！' },
-      { who: 'うけつけ', t: 'これを どうぞ。', fx: () => { G.nets.s += 3; } },
-      { t: 'モンスターとりあみ［小］を 3こ もらった！' },
+      ...(again ? [] : [{ who: 'うけつけ', t: 'これを どうぞ。', fx: () => { G.nets.s += 3; } }, { t: 'モンスターとりあみ［小］を 3こ もらった！' }]),
       { who: 'レン', t: 'いこう、{N}！ げんばへ しゅっぱつだ！' },
-    ], () => Fade.to(() => go(Hunt)));
+    ], () => Fade.to(() => { Hunt.replay = again; go(Hunt); }));
+    // そざいあつめ：はじめての とくべつクエストは ストーリー、それ いがいは ばしょが かわる じゆうな そざいあつめ
+    const story = q.id === 'sozai' && !again;
     Talk.say([
-      { who: 'うけつけ', t: `${questTitle(this.pick)}を うけつけました！ いってらっしゃい！` },
-      { who: 'レン', t: 'よし、いこう！ そざいが ある ばしょへ しゅっぱつだ！' },
-    ], () => Fade.to(() => go(Gather)));
+      { ...hi, t: hi.t + (story ? ' いってらっしゃい！' : '') },
+      { who: 'レン', t: story ? 'よし、いこう！ そざいが ある ばしょへ しゅっぱつだ！' : 'そざいあつめだね！ いつでも かえれるから、きらくに いこう！' },
+    ], () => Fade.to(() => Gather.start(story ? 'story' : 'free')));
   }
 };
+function questDone(q) { return !q.repeat && !!G.cleared[q.id]; }
 function questTitle(q) { return (q.special ? 'とくべつクエスト' : 'クエスト') + `「${q.name}」`; }
 
 // ===== かじやで そうびを きょうか（レンが やりかたを おしえる） =====
@@ -2466,7 +2493,7 @@ const Hunt = {
         { who: 'レン', t: caught ? 'すごい！ トルピーを つかまえたね！' : 'やった！ トルピーを たおしたね！' },
         { t: 'クエスト クリア！' },
         { who: 'レン', t: 'うらいちばに もどって ほうこく しよう！' },
-      ], () => Fade.to(() => { G.cleared.hunt = true; this.ready = false; Market.back = 'hunt'; go(Market); }));
+      ], () => Fade.to(() => { G.cleared.hunt = true; this.ready = false; Market.back = this.replay ? 'replay' : 'hunt'; this.replay = false; go(Market); }));
     }
   },
   update(dt) {
@@ -2618,7 +2645,7 @@ function questTrees(q) {
 }
 const QuestField = {
   t: 0, inv: 0, caught: [],
-  start(id) { this.id = id; this.ready = false; go(this); },
+  start(id, replay = false) { this.id = id; this.replay = replay; this.ready = false; go(this); },
   enter() {
     if (this.ready) return;
     this.ready = true;
@@ -2648,7 +2675,7 @@ const QuestField = {
         { who: 'レン', t: caught ? `すごい！ ${name}を つかまえたね！` : `やった！ ${name}を たおしたね！` },
         { t: 'クエスト クリア！' },
         { who: 'レン', t: 'うらいちばに もどって ほうこく しよう！' },
-      ], () => Fade.to(() => { G.cleared[this.id] = true; this.ready = false; Market.back = this.id; go(Market); }));
+      ], () => Fade.to(() => { G.cleared[this.id] = true; this.ready = false; Market.back = this.replay ? 'replay' : this.id; go(Market); }));
     } else if (g.kind === foe.kind) this.toast = { t: `${MONSTER_NAME[g.kind]} あと ${g.n - this.got}ひき！`, time: 2.5 };
   },
   // やじるしで しめす あいて：ボス、または いちばん ちかい もくひょうの モンスター
@@ -2763,6 +2790,13 @@ const SPOTS = [
   { k: 'iron', x: 2000, y: 890, hide: 'しげみ' },
   { k: 'vine', x: 900, y: 1300, hide: 'き' },
 ];
+// じゆうな そざいあつめ で つかう ばしょ（SPOTS ＋ これ）。まいかい この なかから 8こ えらぶ
+const GSPOT_POOL = [
+  ...SPOTS,
+  { x: 2300, y: 1500 }, { x: 700, y: 1100 }, { x: 1900, y: 1250 }, { x: 400, y: 2100 }, { x: 2750, y: 1750 }, { x: 1600, y: 600 },
+  { x: 600, y: 290, hide: 'しげみ' }, { x: 2800, y: 2190, hide: 'しげみ' }, { x: 2600, y: 1240, hide: 'いわ' }, { x: 800, y: 645, hide: 'いわ' },
+];
+const GATHER_N = 8;
 const ITEM_NAME = { iron: 'てつの かけら', vine: 'じょうぶな つる', gem: 'きらきら いし' };
 const GTREES = (() => {
   const out = HIDE_TREES.slice();
@@ -2770,7 +2804,7 @@ const GTREES = (() => {
     const k = hash(gx, gy); if (k % 10 < 5) continue;
     const x = gx + k % 90 - 45, y = gy + (k >> 3) % 90 - 45;
     const near = (px, py, d) => Math.hypot(x - px, y - py) < d;
-    if (SPOTS.some(s => near(s.x, s.y, 150)) || near(GSTART.x, GSTART.y, 260)) continue;
+    if (GSPOT_POOL.some(s => near(s.x, s.y, 150)) || near(GSTART.x, GSTART.y, 260)) continue;
     if (((x - POND.x) / (POND.rx + 90)) ** 2 + ((y - POND.y) / (POND.ry + 90)) ** 2 < 1) continue;
     if (ROCKS.some(r => near(r[0], r[1], 140)) || BUSHES.some(b => near(b[0], b[1], 140)) || HIDE_TREES.some(t => near(t[0], t[1], 140))) continue;
     out.push([x, y]);
@@ -2797,13 +2831,20 @@ function drawItem(k, x, y, s, t) {
   drawMaterial(k, x, y, s);
 }
 
+// mode：story＝はじめての とくべつクエスト（ばしょは きまっている）、free＝なんかいでも（ばしょと そざいが まいかい かわる・とちゅうで かえれる）
 const Gather = {
+  mode: 'story',
+  start(mode) { this.mode = mode; go(this); },
   enter() {
     this.hero = { x: GSTART.x, y: GSTART.y, dir: 'up', ph: 0, moving: false };
     this.trail = []; this.ren = { x: GSTART.x - 60, y: GSTART.y + 40 };
-    this.spots = SPOTS.map(s => ({ ...s, got: false }));
+    this.spots = this.mode === 'free' ? this.randomSpots() : SPOTS.map(s => ({ ...s, got: false }));
     this.stick = { id: null, dx: 0, dy: 0 };
-    this.t = 0; this.toast = null; this.hint = 0; this.idle = 0; this.pops = []; this.done = false;
+    this.t = 0; this.toast = null; this.hint = 0; this.idle = 0; this.pops = []; this.done = false; this.leaving = false;
+    if (this.mode === 'free') return Talk.say([
+      { who: 'レン', t: `しずかな もりに ついたね。こんどは そざいが ${GATHER_N}こ、まえとは ちがう ところに かくれてるよ。` },
+      { who: 'レン', t: 'もう かえりたく なったら、みぎうえの「かえる」を おしてね。とった そざいは もって かえれるよ！' },
+    ]);
     Talk.say([
       { who: 'レン', t: 'ここが「しずかな もり」だよ。モンスターは いないから あんしんしてね。' },
       { who: 'レン', t: `そざいは ぜんぶで ${SPOTS.length}こ。ひろい もりの あちこちに ちらばってるよ。` },
@@ -2812,6 +2853,14 @@ const Gather = {
     ]);
   },
   left() { return this.spots.filter(s => !s.got).length; },
+  got() { return this.spots.length - this.left(); },
+  randomSpots() {
+    const pool = GSPOT_POOL.map(s => ({ x: s.x, y: s.y, hide: s.hide })), out = [];
+    while (out.length < GATHER_N) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    return out.map(s => ({ ...s, k: ['iron', 'iron', 'vine', 'vine', 'gem'][Math.floor(Math.random() * 5)], got: false }));
+  },
+  // とちゅうで かえる／ぜんぶ みつけた：とった そざいは そのまま もらえる
+  goHome() { this.done = true; this.leaving = false; Fade.to(() => { Market.back = 'gather'; go(Market); }); },
   down: Field.down, move: Field.move, up: Field.up, stickGeo: Field.stickGeo,
   blocked(x, y) {
     const r = 16;
@@ -2841,8 +2890,8 @@ const Gather = {
     if (keys.ArrowLeft || keys.a) dx = -1; if (keys.ArrowRight || keys.d) dx = 1;
     if (keys.ArrowUp || keys.w) dy = -1; if (keys.ArrowDown || keys.s) dy = 1;
     const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; }
-    h.moving = !Talk.active() && !Fade.dir && !this.done && l > 0.15;
-    if (!Talk.active() && !this.done) {
+    h.moving = !Talk.active() && !Fade.dir && !this.done && !this.leaving && l > 0.15;
+    if (!Talk.active() && !this.done && !this.leaving) {
       this.idle += dt;
       if (this.idle > 45 && !this.hint) { this.ask(); this.toast.t = 'レン：なかなか みつからないね。' + this.toast.t.replace('レン：', ''); }
     }
@@ -2862,7 +2911,13 @@ const Gather = {
       s.got = true; G.items[s.k]++; this.idle = 0; this.hint = 0;
       this.pops.push({ k: s.k, x: s.x, y: s.y, t: 0 });
       this.toast = { t: `${ITEM_NAME[s.k]}を みつけた！（のこり ${this.left()}こ）`, time: 2.2 };
-      if (this.left() === 0) {
+      if (this.left() === 0 && this.mode === 'free') {
+        this.done = true; this.toast = null;
+        Talk.say([
+          { t: `${ITEM_NAME[s.k]}を みつけた！` },
+          { who: 'レン', t: `すごい！ ${GATHER_N}こ ぜんぶ みつけたね！ うらいちばに もどろう！` },
+        ], () => this.goHome());
+      } else if (this.left() === 0) {
         this.done = true; this.toast = null;
         Talk.say([
           { t: `${ITEM_NAME[s.k]}を みつけた！` },
@@ -2929,7 +2984,10 @@ const Gather = {
     ctx.font = font(gp); const gw = ctx.measureText(goal).width + gp * 2;
     rr(12, 12, gw, gp * 2.1, 14); ctx.fillStyle = 'rgba(30,40,60,.75)'; ctx.fill();
     text(goal, 12 + gw / 2, 12 + gp * 1.05, gp, '#fff');
-    if (!Talk.active() && !this.done) button(W - 142, 10, 130, 44, 'レンに きく', () => this.ask(), { col: '#7fe0d2', line: '#167a6e', px: 17 });
+    if (!Talk.active() && !this.done && !this.leaving) {
+      button(W - 142, 10, 130, 44, 'レンに きく', () => this.ask(), { col: '#7fe0d2', line: '#167a6e', px: 17 });
+      if (this.mode === 'free') button(W - 142, 62, 130, 44, 'かえる', () => { this.leaving = true; }, { col: '#ffe08a', px: 18 });
+    }
     if (this.toast) {
       const tp = fitPx(this.toast.t, gp * 0.85, W - 40);
       ctx.font = font(tp); const tw = ctx.measureText(this.toast.t).width + tp * 2;
@@ -2940,6 +2998,16 @@ const Gather = {
     circle(st.cx, st.cy, st.R, 'rgba(255,255,255,.28)');
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.arc(st.cx, st.cy, st.R, 0, TAU); ctx.stroke();
     circle(st.cx + this.stick.dx * st.R * 0.6, st.cy + this.stick.dy * st.R * 0.6, st.R * 0.45, this.stick.id !== null ? 'rgba(255,221,51,.95)' : 'rgba(255,255,255,.85)');
+    if (this.leaving) { // とちゅうで かえるか きく
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 0, W, H);
+      const pw = Math.min(440, W - 24), ph = Math.min(230, H - 40), px = (W - pw) / 2, py = (H - ph) / 2, half = (pw - 56) / 2;
+      rr(px, py, pw, ph, 18); ctx.fillStyle = '#fff8e8'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = '#6b4a2b'; ctx.stroke();
+      const a = 'うらいちばに かえる？', b = `とった そざい ${this.got()}こは もって かえれるよ`;
+      text(a, W / 2, py + ph * 0.24, fitPx(a, 24, pw - 40), '#4a2500');
+      text(b, W / 2, py + ph * 0.44, fitPx(b, 17, pw - 40), '#2f6b2a');
+      button(px + 20, py + ph - 84, half, 60, 'はい', () => this.goHome(), { col: '#7fd36b', line: '#2f6b2a', px: 24 });
+      button(px + 36 + half, py + ph - 84, half, 60, 'いいえ', () => { this.leaving = false; }, { col: '#c9d6e8', line: '#4a5a72', px: 24 });
+    }
     if (Talk.active()) { const [bx, by, bw, bh] = talkBox(); Talk.draw(bx, by, bw, bh); }
   }
 };
@@ -3286,7 +3354,7 @@ function startAt(id) {
   else if (id === 'clear') go(Clear);
   else if (id === 'movie2') Movie.play(CARDS2, () => go(Market));
   else if (id === 'market') go(Market);
-  else if (id === 'gather') { G.quest = 'sozai'; go(Gather); }
+  else if (id === 'gather') { G.quest = 'sozai'; Gather.start('story'); }
   else if (id === 'forge') go(Forge);
   else if (id === 'hunt') { G.quest = 'hunt'; go(Hunt); }
   else if (id === 'home') { Market.seen.shop = true; go(Home); }

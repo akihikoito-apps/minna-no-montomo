@@ -134,13 +134,13 @@ if (await ev('typeof Gather.foes') !== 'undefined') throw new Error('gather has 
 const reach = JSON.parse(await ev(`(()=>{const S=20,cw=Math.ceil(GW/S),ch=Math.ceil(GH/S),seen=new Uint8Array(cw*ch),q=[];
  const sx=Math.round(GSTART.x/S),sy=Math.round(GSTART.y/S);seen[sy*cw+sx]=1;q.push([sx,sy]);
  while(q.length){const [x,y]=q.shift();for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=cw||ny>=ch||seen[ny*cw+nx])continue;if(Gather.blocked(nx*S,ny*S))continue;seen[ny*cw+nx]=1;q.push([nx,ny]);}}
- return JSON.stringify(SPOTS.map(s=>{let best=null;for(let y=0;y<ch;y++)for(let x=0;x<cw;x++){if(!seen[y*cw+x])continue;const d=Math.hypot(x*S-s.x,y*S-s.y);if(d<55&&(!best||d<best.d))best={x:x*S,y:y*S,d};}return best;}));})()`));
+ return JSON.stringify(GSPOT_POOL.map(s=>{let best=null;for(let y=0;y<ch;y++)for(let x=0;x<cw;x++){if(!seen[y*cw+x])continue;const d=Math.hypot(x*S-s.x,y*S-s.y);if(d<55&&(!best||d<best.d))best={x:x*S,y:y*S,d};}return best;}));})()`));
 if (reach.some(r => !r)) throw new Error('unreachable spot: ' + JSON.stringify(reach));
 // かくれた そざいの まえまで きて しゃしん
 await ev('Gather.hero.x=1100;Gather.hero.y=560'); await sleep(400); await shot('gather-hidden-tree');
 await ev('Gather.hero.x=2450;Gather.hero.y=2120'); await sleep(400); await shot('gather-hidden-rock');
 const dist = await ev('(()=>{let m=1e9;for(let i=0;i<SPOTS.length;i++)for(let j=i+1;j<SPOTS.length;j++)m=Math.min(m,Math.hypot(SPOTS[i].x-SPOTS[j].x,SPOTS[i].y-SPOTS[j].y));return Math.round(m)})()');
-for (let i = 0; i < reach.length; i++) {
+for (let i = 0; i < 8; i++) {
   await ev(`Gather.hero.x=${reach[i].x};Gather.hero.y=${reach[i].y}`); await sleep(250);
   if (i === 1) await shot('gather-found');
 }
@@ -160,7 +160,7 @@ await shop('quest', 'クエスト うけつけ'); await sleep(200); await shot('
 // したの ボタンで おわった クエストに きりかえ → そざいあつめ だけが でる
 await press('おわった（1）'); await sleep(200); await shot('quest-board-done');
 if (!(await ev("hits.some(h=>h.label==='とくべつクエスト「そざいあつめ」') && !hits.some(h=>h.label==='クエスト「トルピーを さがせ」')"))) throw new Error('done tab wrong');
-await press('おわっていない（1）'); await sleep(200);
+await press('おわっていない（2）'); await sleep(200);
 if (await ev("hits.some(h=>h.label==='とくべつクエスト「そざいあつめ」')")) throw new Error('todo tab shows cleared quest');
 await press('クエスト「トルピーを さがせ」'); await press('はい'); await sleep(300); await talkAll();
 await waitFor('scene===Hunt', 4000); await sleep(600); await shot('hunt-intro'); await talkAll(); await sleep(300);
@@ -324,6 +324,26 @@ await press('てつの けん'); await press('そうび する'); if (await ev('
 await press('もどる'); await press('うらいちばへ もどる'); await waitFor('scene===Market', 5000); await sleep(400); await talkAll();
 await shop('quest', 'クエスト うけつけ'); await press('おわった（4）'); await sleep(200); await shot('quest-board-done4'); await press('とじる');
 const gearState = await ev('JSON.stringify({eq:G.equip,bonus:G.bonus,items:G.items,coins:G.coins})');
+// なんかいでも うけられる そざいあつめ：2こ とって とちゅうで かえる → そざいは もらえる
+const it0 = await ev('G.items.iron+G.items.vine+G.items.gem');
+await shop('quest', 'クエスト うけつけ'); await press('クエスト「もりの そざいあつめ」'); await press('はい'); await talkAll();
+await waitFor('scene===Gather', 4000); await sleep(500); await shot('free-gather-intro'); await talkAll(); await sleep(300);
+if (await ev("Gather.mode") !== 'free' || await ev('Gather.spots.length') !== 8) throw new Error('free gather wrong');
+for (let i = 0; i < 2; i++) { await ev(`Gather.hero.x=Gather.spots[${i}].x;Gather.hero.y=Gather.spots[${i}].y`); await sleep(300); }
+await press('かえる'); await sleep(200); await shot('free-gather-leave');
+await press('いいえ'); await press('かえる'); await press('はい');
+await waitFor('scene===Market', 5000); await sleep(400); await shot('free-gather-back'); await talkAll();
+if (await ev('G.items.iron+G.items.vine+G.items.gem') !== it0 + 2) throw new Error('gathered items not kept');
+// もういちど：おわった クエストは ほうしゅう なしで できる
+const coinsR = await ev('G.coins');
+await shop('quest', 'クエスト うけつけ'); await press('おわった（4）'); await press('クエスト「もりの ポコボムを おいはらえ」'); await sleep(200); await shot('replay-confirm');
+await press('はい'); await talkAll(); await waitFor('scene===QuestField', 4000); await sleep(400); await talkAll();
+await ev("QuestField.foes.filter(f=>f.kind==='pokobom').slice(0,3).forEach(f=>QuestField.onWin(f))");
+await waitFor('scene===QuestField && Talk.active()', 4000); await talkAll();
+await waitFor('scene===Market', 6000); await sleep(400); await shot('replay-back'); await talkAll();
+if (await ev('G.coins') !== coinsR) throw new Error('replay gave reward');
+// うらいちば から メニューへ（いいえ で もどれる）
+await press('メニュー'); await sleep(200); await shot('market-menu'); await press('いいえ');
 // たたかいで こうたい
 await ev("Battle.begin({kind:'yellowl',x:0,y:0,alive:true},Hunt)"); await sleep(600); await talkAll();
 await waitFor("Battle.phase==='cmd'"); const k0 = await ev('Battle.a.kind');
@@ -331,6 +351,9 @@ await press('こうたい'); await sleep(200); await shot('swap-menu');
 const other = await ev('Battle.allies.find(x=>x!==Battle.a).name');
 await press(other); await talkAll(); await waitFor("Battle.phase==='cmd'", 8000); await shot('swapped');
 if (await ev('Battle.a.kind') === k0) throw new Error('swap failed');
+// メニューへ「はい」：セーブして タイトルに もどる
+await ev('go(Market)'); await sleep(700); await talkAll(); await press('メニュー'); await press('はい'); await sleep(1800);
+if (!(await ev('scene===Title'))) throw new Error('menu did not go to title');
 // タイトルから とちゅうの ばめんへ とべるか（よみこみ なおすと なまえも のこっているか）
 const reload = async () => {
   await send('Page.navigate', { url: pathToFileURL(gameDir + '/index.html').href }); await sleep(1200);
