@@ -193,13 +193,13 @@ await waitFor('scene===Hunt && Talk.active()', 5000); await shot('hunt-clear'); 
 await waitFor('scene===Market', 5000); await sleep(400); await talkAll(); await sleep(300); await shot('quest-clear2');
 const party = await ev('JSON.stringify(G.box.map(m=>m.kind))');
 if (!party.includes('toruppy')) throw new Error('toruppy not in box');
-if (await ev('G.coins') !== 500) throw new Error('reward missing');
+if (await ev('G.coins') !== 600) throw new Error('reward missing');
 await press('うらいちばに もどる'); await sleep(600);
 // どうぐや：とりあみを かう
 await shop('shop', 'どうぐや'); await sleep(200); await shot('shop');
 await press('100コイン'); await press('300コイン'); await sleep(200); await shot('shop-bought');
 const shopState = await ev('JSON.stringify({coins:G.coins,nets:G.nets})');
-if (!shopState.includes('"coins":100') || !shopState.includes('"m":1')) throw new Error('shop wrong: ' + shopState);
+if (!shopState.includes('"coins":200') || !shopState.includes('"m":1')) throw new Error('shop wrong: ' + shopState);
 await press('800コイン'); await sleep(200); await shot('shop-poor');
 if (await ev('G.nets.l') !== 0) throw new Error('bought without coins');
 await press('とじる'); await sleep(600);
@@ -280,7 +280,7 @@ const coins0 = await ev('G.coins');
 await qfBattle(5, 'mori-pokobom3', fight);
 await waitFor('scene===QuestField && Talk.active()', 6000); await shot('mori-clear'); await talkAll();
 await waitFor('scene===Market', 6000); await sleep(400); await talkAll(); await sleep(300); await shot('mori-reward');
-if (await ev('G.coins') !== coins0 + 300 || !(await ev('G.cleared.mori'))) throw new Error('mori reward wrong');
+if (await ev('G.coins') !== coins0 + 400 || !(await ev('G.cleared.mori'))) throw new Error('mori reward wrong');
 await press('うらいちばに もどる'); await sleep(400);
 if (await ev('Market.hintTarget()') !== 'smith') throw new Error('smith hint missing: ' + await ev('Market.hintTarget()'));
 // かじや：あいさつ → つくる／きょうか を えらぶ → そうびを えらぶ
@@ -327,6 +327,40 @@ await waitFor('scene===Movie', 6000);
 for (let c = 0; c < 6; c++) { await waitFor('scene===Movie && Movie.tr<0 && Talk.active()'); await sleep(1300); await shot(`movie4-${c + 1}`); await talkAll(); if (c < 5) await sleep(950); }
 await waitFor('scene===Market', 6000); await sleep(400); await shot('invite-back'); await talkAll();
 if (!(await ev('G.cleared.invite'))) throw new Error('invite not set');
+// どうぐやで げんき ドリンクを かう
+await shop('shop', 'どうぐや'); await press('50コイン'); await press('50コイン'); await sleep(200); await shot('shop-potion'); await press('とじる'); await sleep(500);
+if (await ev('G.bag.potion') !== 2) throw new Error('potion not bought');
+// ひかりの みち → まおうの しま
+if (await ev('Market.hintTarget()') !== 'road') throw new Error('road hint missing');
+await shop('road', 'ひかりの みち'); await sleep(200); await shot('road-confirm'); await press('はい');
+await waitFor('scene===IslandField', 5000); await sleep(500); await shot('island-intro'); await talkAll(); await sleep(400);
+// バッグ → スマートフォンで とりあみを かう
+const nsPhone = await ev('G.nets.s');
+await press('バッグ'); await sleep(200); await shot('bag'); await press('スマートフォン'); await sleep(200); await shot('phone');
+await press('100コイン'); if (await ev('G.nets.s') !== nsPhone + 1) throw new Error('phone buy failed');
+await press('もどる'); await press('とじる');
+// ざこと たたかう（アイテムで かいふく）→ レン「あとは まかせろ」
+await ev(`(()=>{const f=IslandField.foes[0];IslandField.hero.x=f.x;IslandField.hero.y=f.y+15;IslandField.inv=0})()`);
+await waitFor('scene===Battle', 5000); await sleep(600); await shot('island-battle'); await talkAll();
+await waitFor("Battle.phase==='cmd'"); await ev('Battle.a.hp=5'); await press('アイテム'); await sleep(200); await shot('battle-items');
+await press('げんき ドリンク ×2'); await talkAll();
+if (await ev('G.bag.potion') !== 1) throw new Error('potion not used');
+await fight();
+await waitFor('scene===IslandField && Talk.active()', 6000); await shot('island-ren'); await talkAll();
+if (!(await ev('IslandField.gateOpen'))) throw new Error('gate not open');
+await sleep(300); await shot('island-gate');
+await ev('IslandField.hero.x=1200;IslandField.hero.y=430');
+await waitFor('scene===Castle', 6000); await sleep(500); await shot('castle'); await talkAll();
+await waitFor('scene===Battle', 6000); await sleep(500); await shot('midboss'); await talkAll();
+await ev('Battle.e.hp=3'); await fight();
+await waitFor('scene===Castle', 6000); await sleep(400); await talkAll(); await sleep(600); await shot('castle-stairs');
+await press('かいだんを のぼる'); await talkAll(); await waitFor('scene===Battle', 6000); await sleep(600); await shot('maou-battle'); await talkAll();
+await waitFor("Battle.phase==='cmd'"); await press('とりあみ'); await press(`とりあみ［小］ ×${await ev('G.nets.s')}`); await talkAll();
+await waitFor("Battle.phase==='cmd'"); await ev('Battle.e.hp=4'); await fight();
+if (await ev('Battle.e.hp') !== 1) throw new Error('maou hp should stop at 1: ' + await ev('Battle.e.hp'));
+await waitFor('scene===Castle', 6000); await sleep(500); await shot('castle-end'); await talkAll();
+await waitFor('scene===Market', 6000); await sleep(400); await shot('island-back'); await talkAll();
+if (!(await ev('G.cleared.island'))) throw new Error('island not cleared');
 await shop('quest', 'クエスト うけつけ'); await press('おわった（4）'); await sleep(200); await shot('quest-board-done4'); await press('とじる');
 const gearState = await ev('JSON.stringify({eq:G.equip,bonus:G.bonus,items:G.items,coins:G.coins})');
 // なんかいでも うけられる そざいあつめ：2こ とって とちゅうで かえる → そざいは もらえる
@@ -346,7 +380,7 @@ await press('はい'); await talkAll(); await waitFor('scene===QuestField', 4000
 await ev("QuestField.foes.filter(f=>f.kind==='pokobom').slice(0,3).forEach(f=>QuestField.onWin(f))");
 await waitFor('scene===QuestField && Talk.active()', 4000); await talkAll();
 await waitFor('scene===Market', 6000); await sleep(400); await shot('replay-back'); await talkAll();
-if (await ev('G.coins') !== coinsR) throw new Error('replay gave reward');
+if (await ev('G.coins') !== coinsR + 100) throw new Error('replay bonus wrong');
 // うらいちば から メニューへ（いいえ で もどれる）
 await press('メニュー'); await sleep(200); await shot('market-menu'); await press('いいえ');
 // たたかいで こうたい
@@ -372,8 +406,8 @@ for (let i = 0; i < chapters; i++) {
   const c = await ev(`JSON.stringify(CHAPTERS[${i}])`), ch = JSON.parse(c);
   if (i > 0) { await reload(); await press('ばめんを えらぶ'); }
   await press(`${i + 1}. ${ch.name}`); await sleep(800);
-  const sc = await ev('scene===Movie?"Movie":scene===Field?"Field":scene===Battle?"Battle":scene===Market?"Market":scene===Gather?"Gather":scene===Forge?"Forge":scene===Hunt?"Hunt":scene===Home?"Home":scene===Raid?"Raid":"?"');
-  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market', home: 'Home', raid: 'Movie', quests2: 'Market', invite: 'Movie' }[ch.id];
+  const sc = await ev('scene===Movie?"Movie":scene===Field?"Field":scene===Battle?"Battle":scene===Market?"Market":scene===Gather?"Gather":scene===Forge?"Forge":scene===Hunt?"Hunt":scene===Home?"Home":scene===Raid?"Raid":scene===IslandField?"IslandField":"?"');
+  const want = { movie: 'Movie', field: 'Field', boss: 'Battle', movie2: 'Movie', market: 'Market', gather: 'Gather', forge: 'Forge', hunt: 'Hunt', town2: 'Market', home: 'Home', raid: 'Movie', quests2: 'Market', invite: 'Movie', island: 'IslandField' }[ch.id];
   if (sc !== want) throw new Error(`chapter ${ch.id} went to ${sc}`);
   if (['market', 'gather'].includes(ch.id) && !(await ev('G.gear'))) throw new Error('gear missing in ' + ch.id);
 }
@@ -383,13 +417,13 @@ await reload(); await press('つづきから'); await sleep(200); await shot('sl
 const lab = await ev("(hits.find(h=>h.label&&h.label.startsWith('セーブ1'))||{}).label");
 await press(lab); await sleep(1500); await talkAll(); await shot('loaded');
 const loaded = await ev('JSON.stringify({market: scene===Market, coins:G.coins, box:G.box.length, team:G.team.length, nets:G.nets, slot:Save.slot, name:G.name})');
-if (!loaded.includes('"market":true') || JSON.parse(loaded).box < 5 || !loaded.includes('"slot":1') || !loaded.includes('"coins":700')) throw new Error('load wrong: ' + loaded);
+if (!loaded.includes('"market":true') || JSON.parse(loaded).box < 5 || !loaded.includes('"slot":1') || !loaded.includes('"coins":900')) throw new Error('load wrong: ' + loaded);
 await reload(); await press('はじめから'); await press(lab); await sleep(200); await shot('slots-overwrite');
 if (!(await ev("hits.some(h=>h.label==='いいえ')"))) throw new Error('no overwrite confirm');
 await press('いいえ'); await press('とじる');
 await reload(); await press('あたらしい ところから'); await sleep(800);
 const newest = await ev('NEWEST.id');
-if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market,home:Home,raid:Movie,quests2:Market,invite:Movie}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
+if (!(await ev(`scene===({gather:Gather,forge:Forge,hunt:Hunt,town2:Market,home:Home,raid:Movie,quests2:Market,invite:Movie,island:IslandField}[NEWEST.id])`))) throw new Error('newest did not open ' + newest);
 await shot('newest');
 console.log(JSON.stringify({ ok: true, gearState, name: await ev('G.name'), savedName, allyHp, gear, items, lv, party, shopState, teamKinds, minSpotDist: dist, chapters, newest, loaded, errors }));
 ws.close(); proc.kill();
